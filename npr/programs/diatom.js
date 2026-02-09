@@ -56,9 +56,9 @@ export function renderFromLDZ(ctx2d, ldzData, width, height, dpi, seed) {
             if (z < 0.0) {
                 const labBg = mix(labBg1, labBg2, Math.pow(0.1 * x / (width-1) + 0.9 * y / (height-1), 1.3));
                 const rgbBg = linearToSrgb(oklabToLinear(labBg));
-                const rb = clamp01(rgbBg[0] + (0.9 / 255.0) * (rng() + rng() - 1.0));
-                const gb = clamp01(rgbBg[1] + (0.9 / 255.0) * (rng() + rng() - 1.0));
-                const bb = clamp01(rgbBg[2] + (0.9 / 255.0) * (rng() + rng() - 1.0));
+                const rb = clamp01(rgbBg[0] + (1.8 / 255.0) * (rng() + rng() - 1.0));
+                const gb = clamp01(rgbBg[1] + (1.8 / 255.0) * (rng() + rng() - 1.0));
+                const bb = clamp01(rgbBg[2] + (1.8 / 255.0) * (rng() + rng() - 1.0));
                 data[idxBase] = Math.round(rb * 255);
                 data[idxBase + 1] = Math.round(gb * 255);
                 data[idxBase + 2] = Math.round(bb * 255);

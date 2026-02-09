@@ -5,7 +5,7 @@ import { NprRenderer } from './renderers/npr-renderer.js';
 // ======= Configuration =======
 const widthCm = 60;
 const heightCm = 60;
-const dpi = 100;
+const dpi = 65;
 const maxDebugSize = 1024;
 const webglSeed = 0;
 const nprSeed = '52769ff2367023';
