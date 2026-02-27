@@ -1,0 +1,24 @@
+{
+    "name": "npr-webgpu-ts",
+    "version": "0.1.0",
+    "description": "NPR based on WebGPU",
+    "main": "public/js/main.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "check": "npx tsc --noEmit && npx biome check .",
+        "lint": "npx tsc --noEmit && npx biome check --write .",
+        "install-hook": "sh ./scripts/install-hook.sh",
+        "build": "rm ./public/js/main.js.map 2>/dev/null; npx esbuild ./src/main.ts --bundle --minify --target=es2024 --outdir=./public/js",
+        "dev": "npx esbuild ./src/main.ts --bundle --sourcemap --target=es2024 --outdir=./public/js --servedir=./public"
+    },
+    "keywords": [],
+    "author": "Ane Johanson",
+    "license": "MIT",
+    "type": "module",
+    "devDependencies": {
+        "@biomejs/biome": "2.3.15",
+        "@webgpu/types": "0.1.69",
+        "esbuild": "0.27.3",
+        "typescript": "5.9.3"
+    }
+}

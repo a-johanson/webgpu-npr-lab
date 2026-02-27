@@ -1,5 +1,3 @@
+node_modules/
+public/js/**
 .DS_Store
-shaders/fragment/shatter.js
-shaders/fragment/terrain.js
-lib/chroma-js
-seeds.md

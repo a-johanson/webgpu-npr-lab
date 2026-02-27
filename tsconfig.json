@@ -1,0 +1,19 @@
+{
+    "compilerOptions": {
+        "target": "ES2024",
+        "module": "ESNext",
+        "lib": ["ESNext", "DOM"],
+        "moduleResolution": "Bundler",
+        "paths": {
+            "xor4096": ["./src/vendor/esm-seedrandom/xor4096.js"]
+        },
+        "strict": true,
+        "outDir": "./public/js",
+        "rootDir": "./src",
+        "baseUrl": ".",
+        "noEmitOnError": true,
+        "sourceMap": true,
+        "types": ["@webgpu/types"]
+    },
+    "include": ["./src/**/*"]
+}

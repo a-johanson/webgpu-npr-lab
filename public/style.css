@@ -1,0 +1,30 @@
+html,
+body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #000;
+    font-family: system-ui, sans-serif;
+}
+
+canvas {
+    border: 2px solid #444;
+    display: block;
+    margin: 20px auto;
+    image-rendering: pixelated;
+}
+
+.controls {
+    display: block;
+    width: fit-content;
+    margin: 20px auto;
+}
+
+.pb-20 {
+    padding-bottom: 20px;
+}
+
+.pb-40 {
+    padding-bottom: 40px;
+}
