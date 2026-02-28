@@ -310,7 +310,7 @@ export class CrystalLdzSceneModule implements LdzSceneModule<CrystalCpuData> {
     ];
 
     /**
-     * PCG hash function equivalent to the GLSL implementation.
+     * PCG hash function (https://www.pcg-random.org/).
      *
      * @param value - Input value.
      * @returns Hashed uint32 value.
@@ -323,13 +323,13 @@ export class CrystalLdzSceneModule implements LdzSceneModule<CrystalCpuData> {
     }
 
     /**
-     * Generates a reproducible random float in [0, 1) equivalent to GLSL rand.
+     * Generates a reproducible random float in [0, 1).
      *
      * @param value - Input seed value.
      * @param seed - Shared deterministic seed.
      * @returns Random float in [0, 1).
      */
-    private static shaderRand(value: number, seed: number): number {
+    private static rand(value: number, seed: number): number {
         const hashed = CrystalLdzSceneModule.pcgHash((value + (seed >>> 0)) >>> 0);
         return hashed / 0xffffffff;
     }
@@ -380,18 +380,15 @@ export class CrystalLdzSceneModule implements LdzSceneModule<CrystalCpuData> {
             const r = Math.sqrt(Math.max(0.0, 1.0 - y * y));
             const angle = index * goldenAngle;
 
-            const randomX = CrystalLdzSceneModule.shaderRand(index, seedU32);
-            const randomY = CrystalLdzSceneModule.shaderRand(index + pointCount, seedU32);
-            const randomZ = CrystalLdzSceneModule.shaderRand(index + 2 * pointCount, seedU32);
+            const randomX = CrystalLdzSceneModule.rand(index, seedU32);
+            const randomY = CrystalLdzSceneModule.rand(index + pointCount, seedU32);
+            const randomZ = CrystalLdzSceneModule.rand(index + 2 * pointCount, seedU32);
             const [qx, qy, qz, qw] = CrystalLdzSceneModule.randomQuaternion(
                 randomX,
                 randomY,
                 randomZ,
             );
-            const scaleRandom = CrystalLdzSceneModule.shaderRand(
-                index + 3 * pointCount,
-                seedU32,
-            );
+            const scaleRandom = CrystalLdzSceneModule.rand(index + 3 * pointCount, seedU32);
             const scale = scaleRandom * 0.7 + 0.5;
 
             const base = index * 8;

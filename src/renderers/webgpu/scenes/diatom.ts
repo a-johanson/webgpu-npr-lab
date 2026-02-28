@@ -297,7 +297,7 @@ export class DiatomLdzSceneModule implements LdzSceneModule<DiatomCpuData> {
     ];
 
     /**
-     * PCG hash function equivalent to the GLSL implementation.
+     * PCG hash function (https://www.pcg-random.org/).
      *
      * @param value - Input value.
      * @returns Hashed uint32 value.
@@ -310,7 +310,7 @@ export class DiatomLdzSceneModule implements LdzSceneModule<DiatomCpuData> {
     }
 
     /**
-     * Generates a reproducible random float in [0, 1) equivalent to GLSL rand.
+     * Generates a reproducible random float in [0, 1).
      *
      * @param index - Object index in the Fibonacci sequence.
      * @param seed - Shared deterministic seed.
