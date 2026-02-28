@@ -1,5 +1,6 @@
+import { DiatomNprProgramModule } from "./renderers/npr/programs/diatom";
 import { NprRenderer } from "./renderers/npr-renderer";
-import { DiatomLdzSceneModule } from "./renderers/webgpu/scenes/diatom-scene";
+import { DiatomLdzSceneModule } from "./renderers/webgpu/scenes/diatom";
 import { WebGpuRenderer } from "./renderers/webgpu-renderer";
 import { StateManager } from "./state-manager";
 import type { AppState } from "./types/app-state";
@@ -72,7 +73,12 @@ async function setup(): Promise<void> {
         stateManager,
         new DiatomLdzSceneModule(),
     );
-    const nprRenderer = new NprRenderer("outputCanvas", webgpuRenderer, stateManager);
+    const nprRenderer = new NprRenderer(
+        "outputCanvas",
+        webgpuRenderer,
+        new DiatomNprProgramModule(),
+        stateManager,
+    );
 
     const dpiInput = getRequiredElement<HTMLInputElement>("dpi");
     const gpuSeedInput = getRequiredElement<HTMLInputElement>("gpuSeed");

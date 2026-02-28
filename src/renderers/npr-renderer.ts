@@ -1,13 +1,14 @@
-import { renderFromLDZ } from "../npr/programs/diatom";
 import type { StateManager } from "../state-manager";
 import type { AppState } from "../types/app-state";
 import type { LdzRenderer } from "./ldz-renderer";
+import type { NprProgramModule } from "./npr/npr-program-module";
 
 /**
  * 2D canvas renderer for NPR output.
  */
 export class NprRenderer {
     private readonly ldzRenderer: LdzRenderer;
+    private readonly nprProgram: NprProgramModule;
     private readonly stateManager: StateManager<AppState>;
     private readonly canvas: HTMLCanvasElement;
     private readonly ctx: CanvasRenderingContext2D;
@@ -20,14 +21,17 @@ export class NprRenderer {
      *
      * @param canvasId - Target canvas ID.
      * @param ldzRenderer - LDZ renderer dependency.
+     * @param nprProgram - Selected NPR program module.
      * @param stateManager - Shared state manager.
      */
     constructor(
         canvasId: string,
         ldzRenderer: LdzRenderer,
+        nprProgram: NprProgramModule,
         stateManager: StateManager<AppState>,
     ) {
         this.ldzRenderer = ldzRenderer;
+        this.nprProgram = nprProgram;
         this.stateManager = stateManager;
 
         const canvas = document.getElementById(canvasId);
@@ -96,7 +100,14 @@ export class NprRenderer {
             this.ctx.save();
             this.ctx.translate(0, this.height);
             this.ctx.scale(1, -1);
-            renderFromLDZ(this.ctx, ldzData, this.width, this.height, dpi, seed);
+            this.nprProgram.renderFromLdz({
+                ctx2d: this.ctx,
+                ldzData,
+                width: this.width,
+                height: this.height,
+                dpi,
+                seed,
+            });
             this.ctx.restore();
 
             await this.stateManager.setState({ nprIsDirty: false });
