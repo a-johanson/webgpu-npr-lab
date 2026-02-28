@@ -36,6 +36,10 @@ fn sd_sphere(p: vec3f, r: f32) -> f32 {
     return length(p) - r;
 }
 
+fn sd_plane(p: vec3f, n: vec3f, h: f32) -> f32 {
+    return dot(p, n) - h;
+}
+
 // Cf. https://iquilezles.org/articles/smin/
 fn smin(a: f32, b: f32, k_in: f32) -> f32 {
     let k = k_in * 6.0;
@@ -43,15 +47,16 @@ fn smin(a: f32, b: f32, k_in: f32) -> f32 {
     return min(a, b) - h * h * h * k * (1.0 / 6.0);
 }
 
-fn scene_sdf(p: vec3f) -> f32 {
-    // Scene constants.
-    let smooth_k = 0.0035;
-    let shell_radius = 1.0;
-    let cutout_radius = 1.025 - scene_meta.obj_radius;
+fn smax(a: f32, b: f32, k: f32) -> f32 {
+    return -smin(-a, -b, k);
+}
 
-    // Optimization: estimate the central index i from the y-coordinate of p.
+fn scene_sdf(p: vec3f) -> f32 {
+    // Number of points on the Fibonacci sphere.
     let point_count = scene_meta.point_count;
     let point_count_f = f32(point_count);
+
+    // Optimization: estimate the central index i from the y-coordinate of p.
     let p_norm = normalize(p);
     let i_from_y = ((1.0 - p_norm.y) * point_count_f * 0.5) - 0.5;
     let i_approx = i32(round(i_from_y));
@@ -71,30 +76,35 @@ fn scene_sdf(p: vec3f) -> f32 {
     let i_min = u32(max(i_approx - index_radius, 0));
     let i_max = u32(min(i_approx + index_radius, i32(point_count) - 1));
 
-    var fib_sphere = 1e9;
+    var fib_sphere = 1.0e6;
+
     // Check only objects within the calculated index corridor.
     for (var i = i_min; i <= i_max; i++) {
         let sphere = sd_sphere(p - points[i].position, points[i].radius);
-        fib_sphere = smin(fib_sphere, sphere, smooth_k);
+        fib_sphere = smin(fib_sphere, sphere, 0.0035);
     }
 
-    let core = max(sd_sphere(p, shell_radius), -fib_sphere);
-    let cutout = sd_sphere(p, cutout_radius);
-    let hull = max(core, -cutout);
-    return hull;
+    let onion_sphere = abs(min(fib_sphere, sd_sphere(p, 1.1))) - 0.05;
+    let half_space = sd_plane(p, normalize(vec3f(-0.5, 1.0, 1.0)), 0.28);
+    let cut_sphere = smax(onion_sphere, half_space, 0.0075);
+
+    return cut_sphere;
+}
+
+fn scene_ground(p: vec3f) -> f32 {
+    return p.y + 1.0 + 0.5 * scene_meta.obj_radius + 0.15;
 }
 
 // Cf. https://iquilezles.org/articles/normalsSDF/
 fn calc_normal(p: vec3f) -> vec3f {
     let h = 0.001;
-    let dx = vec3f(h, 0.0, 0.0);
-    let dy = vec3f(0.0, h, 0.0);
-    let dz = vec3f(0.0, 0.0, h);
-    return normalize(vec3f(
-        scene_sdf(p + dx) - scene_sdf(p - dx),
-        scene_sdf(p + dy) - scene_sdf(p - dy),
-        scene_sdf(p + dz) - scene_sdf(p - dz)
-    ));
+    let k = vec2f(1.0, -1.0);
+    return normalize(
+        k.xyy * scene_sdf(p + k.xyy * h) +
+        k.yyx * scene_sdf(p + k.yyx * h) +
+        k.yxy * scene_sdf(p + k.yxy * h) +
+        k.xxx * scene_sdf(p + k.xxx * h)
+    );
 }
 
 fn calc_ambient_occlusion(p: vec3f, normal: vec3f, max_distance: f32, sample_count: i32) -> f32 {
@@ -155,8 +165,8 @@ fn main_fragment(in: VertexOut) -> @location(0) vec4f {
     let light_dir = normalize(vec3f(0.5, 2.0, 3.25));
 
     // Camera setup.
-    let cam_pos = vec3f(0.0, 0.0, 4.0);
-    let cam_target = vec3f(0.0, 0.0, 0.0);
+    let cam_pos = vec3f(0.0, 0.0, 5.0);
+    let cam_target = vec3f(0.025, -0.1, 0.0);
     let cam_up = vec3f(0.0, 1.0, 0.0);
 
     // Camera basis.
@@ -164,8 +174,9 @@ fn main_fragment(in: VertexOut) -> @location(0) vec4f {
     let cam_right = normalize(cross(cam_forward, cam_up));
     let cam_true_up = cross(cam_right, cam_forward);
 
-    let fov = radians(30.0);
+    let fov = radians(37.0);
     let fov_scale = tan(0.5 * fov);
+
     let ray_dir = normalize(
         cam_right * uv.x * global_uniforms.aspect * fov_scale +
         cam_true_up * uv.y * fov_scale +
@@ -176,19 +187,21 @@ fn main_fragment(in: VertexOut) -> @location(0) vec4f {
     let max_dist = 10.0;
     let max_steps = 500;
     let epsilon = 0.0001;
-    let step_scale = 1.0;
     let orientation_offset = radians(90.0);
+    let step_scale = 1.0;
 
-    var t = 0.0;
     var luminance = 0.0;
     var direction = vec2f(0.0, 0.0);
     var depth = -1.0;
 
+    var t = 0.0;
+
     for (var step = 0; step < max_steps; step++) {
         let p = cam_pos + ray_dir * t;
-        let d = scene_sdf(p);
+        let d_scene = scene_sdf(p);
+        let d_ground = scene_ground(p);
 
-        if (d < epsilon) {
+        if (d_scene < epsilon) {
             let normal = calc_normal(p);
             let p_relative = p - cam_pos;
 
@@ -211,7 +224,18 @@ fn main_fragment(in: VertexOut) -> @location(0) vec4f {
             let p_minus_clip = vec2f(dot(p_minus, cam_right), dot(p_minus, cam_true_up));
             direction = normalize(p_plus_clip - p_minus_clip);
 
-            depth = dot(p - cam_pos, cam_forward);
+            depth = dot(p_relative, cam_forward);
+            break;
+        }
+
+        if (d_ground < epsilon) {
+            let shadow = calc_ambient_occlusion(p, light_dir, 0.2, 8);
+            if (shadow < 1.0) {
+                let shadow_strength = 1.0;
+                luminance = shadow_strength * shadow + (1.0 - shadow_strength);
+                direction = vec2f(1.0, 0.0);
+                depth = dot(p - cam_pos, cam_forward);
+            }
             break;
         }
 
@@ -219,7 +243,7 @@ fn main_fragment(in: VertexOut) -> @location(0) vec4f {
             break;
         }
 
-        t += step_scale * d;
+        t += step_scale * min(d_scene, d_ground);
     }
 
     return vec4f(luminance, direction, depth);
@@ -227,14 +251,14 @@ fn main_fragment(in: VertexOut) -> @location(0) vec4f {
 `;
 
 /**
- * CPU-side data payload for the diatom scene.
+ * CPU-side data payload for the shell scene.
  */
-type DiatomCpuData = {
+type ShellCpuData = {
     points: Float32Array;
     pointCount: number;
 };
 
-class DiatomGpuResources implements LdzSceneGpuResources {
+class ShellGpuResources implements LdzSceneGpuResources {
     readonly bindGroupEntries: readonly GPUBindGroupEntry[];
     readonly #pointsBuffer: GPUBuffer;
     readonly #metaBuffer: GPUBuffer;
@@ -270,13 +294,13 @@ class DiatomGpuResources implements LdzSceneGpuResources {
 }
 
 /**
- * LDZ scene module for a diatom-like point cloud SDF.
+ * LDZ scene module for a shell-like point cloud SDF.
  */
-export class DiatomLdzSceneModule implements LdzSceneModule<DiatomCpuData> {
-    private static readonly POINT_COUNT = 120;
-    private static readonly BASE_RADIUS = 0.23;
+export class ShellLdzSceneModule implements LdzSceneModule<ShellCpuData> {
+    private static readonly POINT_COUNT = 70;
+    private static readonly BASE_RADIUS = 0.39;
 
-    readonly id = "diatom";
+    readonly id = "shell";
     readonly fragmentShader = WGSL_FRAGMENT_SHADER;
     readonly fragmentEntryPoint = "main_fragment";
     readonly bindGroupLayoutEntries: readonly GPUBindGroupLayoutEntry[] = [
@@ -297,55 +321,29 @@ export class DiatomLdzSceneModule implements LdzSceneModule<DiatomCpuData> {
     ];
 
     /**
-     * PCG hash function equivalent to the GLSL implementation.
-     *
-     * @param value - Input value.
-     * @returns Hashed uint32 value.
-     */
-    private static pcgHash(value: number): number {
-        const state = (Math.imul(value >>> 0, 747796405) + 2891336453) >>> 0;
-        const shift = ((state >>> 28) + 4) >>> 0;
-        const word = Math.imul(((state >>> shift) ^ state) >>> 0, 277803737) >>> 0;
-        return ((word >>> 22) ^ word) >>> 0;
-    }
-
-    /**
-     * Generates a reproducible random float in [0, 1) equivalent to GLSL rand.
-     *
-     * @param index - Object index in the Fibonacci sequence.
-     * @param seed - Shared deterministic seed.
-     * @returns Random float in [0, 1).
-     */
-    private static shaderRand(index: number, seed: number): number {
-        const hashed = DiatomLdzSceneModule.pcgHash((index + (seed >>> 0)) >>> 0);
-        return hashed / 0xffffffff;
-    }
-
-    /**
      * Generates a deterministic Fibonacci point cloud.
      *
      * @param seed - Shared deterministic seed.
      * @param dimensions - Current render dimensions.
      * @returns Packed point data and count.
      */
-    createCpuData(seed: number, dimensions: AppDimensions): DiatomCpuData {
+    createCpuData(seed: number, dimensions: AppDimensions): ShellCpuData {
+        void seed;
         void dimensions;
-        const pointCount = DiatomLdzSceneModule.POINT_COUNT;
+
+        const pointCount = ShellLdzSceneModule.POINT_COUNT;
         const data = new Float32Array(pointCount * 4);
         const goldenAngle = Math.PI * (3.0 - Math.sqrt(5.0));
-        const seedU32 = seed >>> 0;
 
         for (let index = 0; index < pointCount; index++) {
             const y = 1.0 - ((index + 0.5) / pointCount) * 2.0;
             const r = Math.sqrt(Math.max(0.0, 1.0 - y * y));
             const angle = index * goldenAngle;
-            const radiusRandom = DiatomLdzSceneModule.shaderRand(index, seedU32);
 
             data[index * 4] = Math.cos(angle) * r;
             data[index * 4 + 1] = y;
             data[index * 4 + 2] = Math.sin(angle) * r;
-            data[index * 4 + 3] =
-                DiatomLdzSceneModule.BASE_RADIUS * (1.0 + radiusRandom * radiusRandom * 0.05);
+            data[index * 4 + 3] = ShellLdzSceneModule.BASE_RADIUS;
         }
 
         return {
@@ -365,7 +363,7 @@ export class DiatomLdzSceneModule implements LdzSceneModule<DiatomCpuData> {
     createGpuResources(
         device: GPUDevice,
         queue: GPUQueue,
-        cpuData: DiatomCpuData,
+        cpuData: ShellCpuData,
     ): LdzSceneGpuResources {
         const pointsBuffer = device.createBuffer({
             size: cpuData.points.byteLength,
@@ -379,14 +377,15 @@ export class DiatomLdzSceneModule implements LdzSceneModule<DiatomCpuData> {
         const sceneMetaView = new DataView(sceneMetaBuffer);
         sceneMetaView.setUint32(0, cpuData.pointCount, true);
         sceneMetaView.setUint32(4, 0, true);
-        sceneMetaView.setFloat32(8, DiatomLdzSceneModule.BASE_RADIUS, true);
+        sceneMetaView.setFloat32(8, ShellLdzSceneModule.BASE_RADIUS, true);
         sceneMetaView.setFloat32(12, 0, true);
+
         const metaBuffer = device.createBuffer({
             size: sceneMetaBuffer.byteLength,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
         queue.writeBuffer(metaBuffer, 0, sceneMetaBuffer);
 
-        return new DiatomGpuResources(pointsBuffer, metaBuffer);
+        return new ShellGpuResources(pointsBuffer, metaBuffer);
     }
 }
