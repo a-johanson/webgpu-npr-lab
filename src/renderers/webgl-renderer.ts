@@ -139,7 +139,7 @@ export class WebGLRenderer {
             });
         });
 
-        this.stateManager.subscribe(["webglSeed"], async () => {
+        this.stateManager.subscribe(["gpuSeed"], async () => {
             await this.renderLdzTiled();
         });
 
@@ -241,7 +241,7 @@ export class WebGLRenderer {
 
         try {
             const gl = this.gl;
-            const seed = this.stateManager.get("webglSeed");
+            const seed = this.stateManager.get("gpuSeed");
 
             const xTileCount = Math.ceil(this.width / this.tileSize);
             const yTileCount = Math.ceil(this.height / this.tileSize);

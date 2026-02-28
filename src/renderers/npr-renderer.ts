@@ -1,13 +1,13 @@
 import { renderFromLDZ } from "../npr/programs/diatom";
 import type { StateManager } from "../state-manager";
 import type { AppState } from "../types/app-state";
-import type { WebGLRenderer } from "./webgl-renderer";
+import type { LdzRenderer } from "./ldz-renderer";
 
 /**
  * 2D canvas renderer for NPR output.
  */
 export class NprRenderer {
-    private readonly webglRenderer: WebGLRenderer;
+    private readonly ldzRenderer: LdzRenderer;
     private readonly stateManager: StateManager<AppState>;
     private readonly canvas: HTMLCanvasElement;
     private readonly ctx: CanvasRenderingContext2D;
@@ -19,15 +19,15 @@ export class NprRenderer {
      * Creates an NPR renderer.
      *
      * @param canvasId - Target canvas ID.
-     * @param webglRenderer - WebGL renderer dependency.
+     * @param ldzRenderer - LDZ renderer dependency.
      * @param stateManager - Shared state manager.
      */
     constructor(
         canvasId: string,
-        webglRenderer: WebGLRenderer,
+        ldzRenderer: LdzRenderer,
         stateManager: StateManager<AppState>,
     ) {
-        this.webglRenderer = webglRenderer;
+        this.ldzRenderer = ldzRenderer;
         this.stateManager = stateManager;
 
         const canvas = document.getElementById(canvasId);
@@ -91,7 +91,7 @@ export class NprRenderer {
         try {
             const seed = this.stateManager.get("nprSeed");
             const dpi = this.stateManager.get("dpi");
-            const ldzData = this.webglRenderer.getLdzData();
+            const ldzData = this.ldzRenderer.getLdzData();
 
             this.ctx.save();
             this.ctx.translate(0, this.height);

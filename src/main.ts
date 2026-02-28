@@ -1,5 +1,6 @@
 import { NprRenderer } from "./renderers/npr-renderer";
-import { WebGLRenderer } from "./renderers/webgl-renderer";
+import { DiatomLdzSceneModule } from "./renderers/webgpu/scenes/diatom-scene";
+import { WebGpuRenderer } from "./renderers/webgpu-renderer";
 import { StateManager } from "./state-manager";
 import type { AppState } from "./types/app-state";
 
@@ -8,7 +9,7 @@ const widthCm = 60;
 const heightCm = 60;
 const dpi = 65;
 const maxDebugSize = 1024;
-const webglSeed = 0;
+const gpuSeed = 0;
 const nprSeed = "52769ff2367023";
 // =============================
 
@@ -57,7 +58,7 @@ function getRequiredElement<TElement extends HTMLElement>(id: string): TElement 
  */
 async function setup(): Promise<void> {
     const stateManager = new StateManager<AppState>({
-        webglSeed,
+        gpuSeed,
         nprSeed,
         dpi,
         dimensions: computeDimensions(dpi),
@@ -66,29 +67,32 @@ async function setup(): Promise<void> {
         isRendering: false,
     });
 
-    const webglRenderer = new WebGLRenderer("debugCanvas", stateManager);
-    const nprRenderer = new NprRenderer("outputCanvas", webglRenderer, stateManager);
+    const webgpuRenderer = await WebGpuRenderer.create(
+        "debugCanvas",
+        stateManager,
+        new DiatomLdzSceneModule(),
+    );
+    const nprRenderer = new NprRenderer("outputCanvas", webgpuRenderer, stateManager);
 
     const dpiInput = getRequiredElement<HTMLInputElement>("dpi");
-    const webglSeedInput = getRequiredElement<HTMLInputElement>("webglSeed");
+    const gpuSeedInput = getRequiredElement<HTMLInputElement>("gpuSeed");
     const nprSeedInput = getRequiredElement<HTMLInputElement>("nprSeed");
 
     const applyDpiButton = getRequiredElement<HTMLButtonElement>("applyDpi");
-    const applyWebGLSeedButton = getRequiredElement<HTMLButtonElement>("applyWebGLSeed");
-    const randomizeWebGLSeedButton =
-        getRequiredElement<HTMLButtonElement>("randomizeWebGLSeed");
+    const applyGpuSeedButton = getRequiredElement<HTMLButtonElement>("applyGpuSeed");
+    const randomizeGpuSeedButton = getRequiredElement<HTMLButtonElement>("randomizeGpuSeed");
     const applyNprSeedButton = getRequiredElement<HTMLButtonElement>("applyNprSeed");
 
     stateManager.subscribe(["isRendering"], () => {
         const isRendering = stateManager.get("isRendering");
         applyDpiButton.disabled = isRendering;
-        applyWebGLSeedButton.disabled = isRendering;
-        randomizeWebGLSeedButton.disabled = isRendering;
+        applyGpuSeedButton.disabled = isRendering;
+        randomizeGpuSeedButton.disabled = isRendering;
         applyNprSeedButton.disabled = isRendering;
     });
 
     dpiInput.value = String(stateManager.get("dpi"));
-    webglSeedInput.value = String(stateManager.get("webglSeed"));
+    gpuSeedInput.value = String(stateManager.get("gpuSeed"));
     nprSeedInput.value = stateManager.get("nprSeed");
 
     applyDpiButton.addEventListener("click", async () => {
@@ -100,17 +104,17 @@ async function setup(): Promise<void> {
         });
     });
 
-    randomizeWebGLSeedButton.addEventListener("click", async () => {
+    randomizeGpuSeedButton.addEventListener("click", async () => {
         const randomSeed = Math.floor(Math.random() * 0x100000000);
-        webglSeedInput.value = String(randomSeed);
-        console.log("Random WebGL seed:", randomSeed);
-        await stateManager.setState({ webglSeed: randomSeed, nprIsDirty: true });
+        gpuSeedInput.value = String(randomSeed);
+        console.log("Random GPU seed:", randomSeed);
+        await stateManager.setState({ gpuSeed: randomSeed, nprIsDirty: true });
     });
 
-    applyWebGLSeedButton.addEventListener("click", async () => {
-        const parsedInt = parseInt(webglSeedInput.value, 10);
-        const newSeed = Number.isNaN(parsedInt) ? webglSeed : parsedInt;
-        await stateManager.setState({ webglSeed: newSeed, nprIsDirty: true });
+    applyGpuSeedButton.addEventListener("click", async () => {
+        const parsedInt = parseInt(gpuSeedInput.value, 10);
+        const newSeed = Number.isNaN(parsedInt) ? gpuSeed : parsedInt;
+        await stateManager.setState({ gpuSeed: newSeed, nprIsDirty: true });
     });
 
     applyNprSeedButton.addEventListener("click", async () => {
@@ -122,7 +126,7 @@ async function setup(): Promise<void> {
         }
     });
 
-    await webglRenderer.renderLdzTiled();
+    await webgpuRenderer.renderLdzTiled();
     await nprRenderer.render();
 }
 

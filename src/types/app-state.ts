@@ -12,7 +12,7 @@ export type AppDimensions = {
  * Shared application state shape.
  */
 export type AppState = {
-    webglSeed: number;
+    gpuSeed: number;
     nprSeed: string;
     dpi: number;
     dimensions: AppDimensions;
