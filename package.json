@@ -1,7 +1,7 @@
 {
-    "name": "npr-webgpu-ts",
+    "name": "webgpu-npr-lab",
     "version": "0.1.0",
-    "description": "NPR based on WebGPU",
+    "description": "Non-photorealistic rendering based on a hybrid WebGPU-CPU pipeline",
     "main": "public/js/main.js",
     "scripts": {
         "test": "echo \"Error: no test specified\" && exit 1",
@@ -11,7 +11,13 @@
         "build": "rm ./public/js/main.js.map 2>/dev/null; npx esbuild ./src/main.ts --bundle --minify --target=es2024 --outdir=./public/js",
         "dev": "npx esbuild ./src/main.ts --bundle --sourcemap --target=es2024 --outdir=./public/js --servedir=./public"
     },
-    "keywords": [],
+    "keywords": [
+        "webgpu",
+        "npr",
+        "non-photorealistic rendering",
+        "gpu",
+        "cpu"
+    ],
     "author": "Ane Johanson",
     "license": "MIT",
     "type": "module",
