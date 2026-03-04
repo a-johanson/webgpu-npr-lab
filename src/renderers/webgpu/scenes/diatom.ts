@@ -230,7 +230,7 @@ fn main_fragment(in: VertexOut) -> @location(0) vec4f {
  * CPU-side data payload for the diatom scene.
  */
 type DiatomCpuData = {
-    points: Float32Array;
+    points: Float32Array<ArrayBuffer>;
     pointCount: number;
 };
 
@@ -316,7 +316,7 @@ export class DiatomLdzSceneModule implements LdzSceneModule<DiatomCpuData> {
      * @param seed - Shared deterministic seed.
      * @returns Random float in [0, 1).
      */
-    private static shaderRand(index: number, seed: number): number {
+    private static rand(index: number, seed: number): number {
         const hashed = DiatomLdzSceneModule.pcgHash((index + (seed >>> 0)) >>> 0);
         return hashed / 0xffffffff;
     }
@@ -331,7 +331,7 @@ export class DiatomLdzSceneModule implements LdzSceneModule<DiatomCpuData> {
     createCpuData(seed: number, dimensions: AppDimensions): DiatomCpuData {
         void dimensions;
         const pointCount = DiatomLdzSceneModule.POINT_COUNT;
-        const data = new Float32Array(pointCount * 4);
+        const data: Float32Array<ArrayBuffer> = new Float32Array(pointCount * 4);
         const goldenAngle = Math.PI * (3.0 - Math.sqrt(5.0));
         const seedU32 = seed >>> 0;
 
@@ -339,7 +339,7 @@ export class DiatomLdzSceneModule implements LdzSceneModule<DiatomCpuData> {
             const y = 1.0 - ((index + 0.5) / pointCount) * 2.0;
             const r = Math.sqrt(Math.max(0.0, 1.0 - y * y));
             const angle = index * goldenAngle;
-            const radiusRandom = DiatomLdzSceneModule.shaderRand(index, seedU32);
+            const radiusRandom = DiatomLdzSceneModule.rand(index, seedU32);
 
             data[index * 4] = Math.cos(angle) * r;
             data[index * 4 + 1] = y;
@@ -371,9 +371,7 @@ export class DiatomLdzSceneModule implements LdzSceneModule<DiatomCpuData> {
             size: cpuData.points.byteLength,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         });
-        const pointUploadData = new Float32Array(cpuData.points.length);
-        pointUploadData.set(cpuData.points);
-        queue.writeBuffer(pointsBuffer, 0, pointUploadData);
+        queue.writeBuffer(pointsBuffer, 0, cpuData.points);
 
         const sceneMetaBuffer = new ArrayBuffer(16);
         const sceneMetaView = new DataView(sceneMetaBuffer);

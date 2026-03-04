@@ -243,7 +243,7 @@ fn main_fragment(in: VertexOut) -> @location(0) vec4f {
  * CPU-side data payload for the crystal scene.
  */
 type CrystalCpuData = {
-    objects: Float32Array;
+    objects: Float32Array<ArrayBuffer>;
     pointCount: number;
 };
 
@@ -371,7 +371,7 @@ export class CrystalLdzSceneModule implements LdzSceneModule<CrystalCpuData> {
         void dimensions;
 
         const pointCount = CrystalLdzSceneModule.POINT_COUNT;
-        const data = new Float32Array(pointCount * 8);
+        const data: Float32Array<ArrayBuffer> = new Float32Array(pointCount * 8);
         const goldenAngle = Math.PI * (3.0 - Math.sqrt(5.0));
         const seedU32 = seed >>> 0;
 
@@ -425,9 +425,7 @@ export class CrystalLdzSceneModule implements LdzSceneModule<CrystalCpuData> {
             size: cpuData.objects.byteLength,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         });
-        const objectsUploadData = new Float32Array(cpuData.objects.length);
-        objectsUploadData.set(cpuData.objects);
-        queue.writeBuffer(objectsBuffer, 0, objectsUploadData);
+        queue.writeBuffer(objectsBuffer, 0, cpuData.objects);
 
         const sceneMetaBuffer = new ArrayBuffer(16);
         const sceneMetaView = new DataView(sceneMetaBuffer);

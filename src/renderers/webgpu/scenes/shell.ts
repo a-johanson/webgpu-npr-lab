@@ -254,7 +254,7 @@ fn main_fragment(in: VertexOut) -> @location(0) vec4f {
  * CPU-side data payload for the shell scene.
  */
 type ShellCpuData = {
-    points: Float32Array;
+    points: Float32Array<ArrayBuffer>;
     pointCount: number;
 };
 
@@ -332,7 +332,7 @@ export class ShellLdzSceneModule implements LdzSceneModule<ShellCpuData> {
         void dimensions;
 
         const pointCount = ShellLdzSceneModule.POINT_COUNT;
-        const data = new Float32Array(pointCount * 4);
+        const data: Float32Array<ArrayBuffer> = new Float32Array(pointCount * 4);
         const goldenAngle = Math.PI * (3.0 - Math.sqrt(5.0));
 
         for (let index = 0; index < pointCount; index++) {
@@ -369,9 +369,7 @@ export class ShellLdzSceneModule implements LdzSceneModule<ShellCpuData> {
             size: cpuData.points.byteLength,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         });
-        const pointUploadData = new Float32Array(cpuData.points.length);
-        pointUploadData.set(cpuData.points);
-        queue.writeBuffer(pointsBuffer, 0, pointUploadData);
+        queue.writeBuffer(pointsBuffer, 0, cpuData.points);
 
         const sceneMetaBuffer = new ArrayBuffer(16);
         const sceneMetaView = new DataView(sceneMetaBuffer);
