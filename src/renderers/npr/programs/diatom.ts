@@ -1,14 +1,9 @@
 import { prng_xor4096 } from "xor4096";
-import { linearToOklab, linearToSrgb, oklabToLinear, srgbToLinear } from "../../../npr/color";
+import { LinearGradient } from "../../../npr/color";
 import { outlinesFromLDZ } from "../../../npr/outlines";
 import { drawPolyline } from "../../../npr/polyline";
 import { flowFieldStreamlines } from "../../../npr/streamlines";
 import type { NprProgramModule, NprProgramRenderContext } from "../npr-program-module";
-
-/**
- * A 3-component color tuple.
- */
-type Color3 = [number, number, number];
 
 /**
  * NPR module for the diatom program.
@@ -72,8 +67,10 @@ export class DiatomNprProgramModule implements NprProgramModule {
         ctx2d.lineCap = "round";
         ctx2d.lineJoin = "round";
 
-        const labBg1 = linearToOklab(srgbToLinear([0.0, 0.7, 0.95]));
-        const labBg2 = linearToOklab(srgbToLinear([0.0, 0.0, 0.24]));
+        const backgroundGradient = new LinearGradient([
+            { position: 0.0, srgb: [0.0, 0.7, 0.95] },
+            { position: 1.0, srgb: [0.0, 0.0, 0.24] },
+        ]);
         const rFill = Math.round(0.99 * 255);
         const gFill = Math.round(0.95 * 255);
         const bFill = Math.round(0.85 * 255);
@@ -87,24 +84,14 @@ export class DiatomNprProgramModule implements NprProgramModule {
                 const idxBase = ((height - 1 - y) * width + x) * 4;
                 const z = ldzData[(y * width + x) * 4 + 3];
                 if (z < 0.0) {
-                    const labBg = DiatomNprProgramModule.mix(
-                        labBg1,
-                        labBg2,
+                    const rgbBg = backgroundGradient.sampleSrgbJittered(
                         ((0.1 * x) / widthDenominator + (0.9 * y) / heightDenominator) ** 1.3,
+                        1.8 / 255.0,
+                        rng,
                     );
-                    const rgbBg = linearToSrgb(oklabToLinear(labBg));
-                    const rb = DiatomNprProgramModule.clamp01(
-                        rgbBg[0] + (1.8 / 255.0) * (rng() + rng() - 1.0),
-                    );
-                    const gb = DiatomNprProgramModule.clamp01(
-                        rgbBg[1] + (1.8 / 255.0) * (rng() + rng() - 1.0),
-                    );
-                    const bb = DiatomNprProgramModule.clamp01(
-                        rgbBg[2] + (1.8 / 255.0) * (rng() + rng() - 1.0),
-                    );
-                    data[idxBase] = Math.round(rb * 255);
-                    data[idxBase + 1] = Math.round(gb * 255);
-                    data[idxBase + 2] = Math.round(bb * 255);
+                    data[idxBase] = Math.round(rgbBg[0] * 255);
+                    data[idxBase + 1] = Math.round(rgbBg[1] * 255);
+                    data[idxBase + 2] = Math.round(rgbBg[2] * 255);
                 } else {
                     data[idxBase] = rFill;
                     data[idxBase + 1] = gFill;
@@ -124,28 +111,5 @@ export class DiatomNprProgramModule implements NprProgramModule {
         for (const line of outlines) {
             drawPolyline(ctx2d, line, [0.5, 0.5]);
         }
-    }
-
-    /**
-     * Linearly interpolates between vectors.
-     *
-     * @param a - Start vector.
-     * @param b - End vector.
-     * @param t - Interpolation factor.
-     * @returns Interpolated vector.
-     */
-    private static mix(a: Color3, b: Color3, t: number): Color3 {
-        const clamped = Math.min(Math.max(t, 0.0), 1.0);
-        return a.map((value, index) => value * (1.0 - clamped) + b[index] * clamped) as Color3;
-    }
-
-    /**
-     * Clamps a value to [0, 1].
-     *
-     * @param value - Input value.
-     * @returns Clamped value.
-     */
-    private static clamp01(value: number): number {
-        return Math.min(Math.max(value, 0.0), 1.0);
     }
 }
