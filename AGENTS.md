@@ -7,7 +7,7 @@
 * Prefer object-oriented design whenever it makes sense to combine data and logic into classes.
 * Always generate TSDoc comments in accordance with the Google TypeScript Style Guide.
 * Use American English spelling.
-* After you apply edits, run `npm run check` to check for type errors and to apply linting & formatting.
+* After you apply edits, run `npm run lint` to check for type errors and to apply linting & formatting.
 
 ## Collaboration and design workflow
 
