@@ -1,18 +1,18 @@
 import { bootstrapApplication } from "./app-runtime";
-import { DiatomNprProgramModule } from "./renderers/npr/programs/diatom";
+import { RadiolarianNprProgramModule } from "./renderers/npr/programs/radiolarian";
 import { RadiolarianLdzSceneModule } from "./renderers/webgpu/scenes/radiolarian";
 
 // ======= Configuration =======
-const widthCm = 60;
+const widthCm = 50;
 const heightCm = 60;
-const dpi = 65;
+const dpi = 60;
 const maxDebugSize = 1024;
 const gpuSeed = 0;
 const nprSeed = "52769ff2367023";
 // =============================
 
 const ldzSceneModule = new RadiolarianLdzSceneModule();
-const nprProgramModule = new DiatomNprProgramModule();
+const nprProgramModule = new RadiolarianNprProgramModule();
 
 bootstrapApplication({
     widthCm,

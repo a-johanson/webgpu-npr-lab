@@ -229,10 +229,10 @@ fn main_fragment(in: VertexOut) -> @location(0) vec4f {
     let uv = in.uv * 2.0 - 1.0;
 
     // Light setup.
-    let light_dir = normalize(vec3f(0.5, 2.0, 3.25));
+    let light_dir = normalize(vec3f(0.5, 1.0, 2.0));
 
     // Camera setup.
-    let cam_pos = vec3f(0.0, 0.0, 4.0);
+    let cam_pos = vec3f(0.0, 0.0, 3.8);
     let cam_target = vec3f(0.0, 0.0, 0.0);
     let cam_up = vec3f(0.0, 1.0, 0.0);
 
@@ -241,7 +241,7 @@ fn main_fragment(in: VertexOut) -> @location(0) vec4f {
     let cam_right = normalize(cross(cam_forward, cam_up));
     let cam_true_up = cross(cam_right, cam_forward);
 
-    let fov = radians(35.0);
+    let fov = radians(40.0);
     let fov_scale = tan(0.5 * fov);
     let ray_dir = normalize(
         cam_right * uv.x * global_uniforms.aspect * fov_scale +

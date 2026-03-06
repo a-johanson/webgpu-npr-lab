@@ -3,7 +3,7 @@
 /**
  * RGB triplet.
  */
-type Color3 = [number, number, number];
+export type Color3 = [number, number, number];
 
 /**
  * A single color stop in a linear gradient.
