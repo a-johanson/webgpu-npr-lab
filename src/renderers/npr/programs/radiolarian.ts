@@ -34,12 +34,12 @@ export class RadiolarianNprProgramModule implements NprProgramModule {
         const pixelsPerMm = dpi / 25.4;
 
         const config = {
-            dSepMax: 2.7 * pixelsPerMm,
-            dSepShadowFactor: 0.2,
+            dSepMax: 1.7 * pixelsPerMm,
+            dSepShadowFactor: 0.3,
             gammaLuminance: 2.0,
-            dTestFactor: 1.1,
+            dTestFactor: 0.9,
             dStep: 0.3 * pixelsPerMm,
-            maxDepthStep: 0.02,
+            maxDepthStep: 0.05,
             maxAccumAngle: Math.PI * 0.6,
             maxHatchedLuminance: 1.9,
             maxSteps: 750,
@@ -50,7 +50,7 @@ export class RadiolarianNprProgramModule implements NprProgramModule {
 
         const streamlines = flowFieldStreamlines(ldzData, width, height, seed, config);
         config.orientationOffset = (Math.PI / 180.0) * 30.0;
-        config.maxHatchedLuminance = 0.2475;
+        config.maxHatchedLuminance = 0.25;
         const crosslines = flowFieldStreamlines(
             ldzData,
             width,
@@ -62,8 +62,8 @@ export class RadiolarianNprProgramModule implements NprProgramModule {
             maxAreaDeviation: config.maxAreaDeviation,
         });
 
-        ctx2d.strokeStyle = "#111";
-        ctx2d.lineWidth = 0.18 * pixelsPerMm;
+        ctx2d.strokeStyle = "#000";
+        ctx2d.lineWidth = 0.22 * pixelsPerMm;
         ctx2d.lineCap = "round";
         ctx2d.lineJoin = "round";
 
@@ -86,8 +86,8 @@ export class RadiolarianNprProgramModule implements NprProgramModule {
             minChromaForHueJitter: 0.025,
         });
         const rFill = Math.round(0.99 * 255);
-        const gFill = Math.round(0.95 * 255);
-        const bFill = Math.round(0.85 * 255);
+        const gFill = Math.round(0.97 * 255);
+        const bFill = Math.round(0.86 * 255);
         const imgData = ctx2d.createImageData(width, height, { colorSpace: "srgb" });
         const data = imgData.data;
         // const widthDenominator = Math.max(width - 1, 1);
