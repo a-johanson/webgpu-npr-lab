@@ -346,6 +346,7 @@ export class RadiolarianLdzSceneModule implements LdzSceneModule<RadiolarianCpuD
     readonly id = "radiolarian";
     readonly fragmentShader = RadiolarianLdzSceneModule.FRAGMENT_SHADER;
     readonly fragmentEntryPoint = "main_fragment";
+    readonly outputSpec = { mode: "ldz-only" } as const;
     readonly bindGroupLayoutEntries: readonly GPUBindGroupLayoutEntry[] = [
         {
             binding: 0,

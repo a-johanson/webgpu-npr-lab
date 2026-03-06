@@ -1,13 +1,13 @@
 import type { StateManager } from "../state-manager";
 import type { AppState } from "../types/app-state";
-import type { LdzRenderer } from "./ldz-renderer";
+import type { FrameRenderer } from "./frame-renderer";
 import type { NprProgramModule } from "./npr/npr-program-module";
 
 /**
  * 2D canvas renderer for NPR output.
  */
 export class NprRenderer {
-    private readonly ldzRenderer: LdzRenderer;
+    private readonly frameRenderer: FrameRenderer;
     private readonly nprProgram: NprProgramModule;
     private readonly stateManager: StateManager<AppState>;
     private readonly canvas: HTMLCanvasElement;
@@ -20,17 +20,17 @@ export class NprRenderer {
      * Creates an NPR renderer.
      *
      * @param canvasId - Target canvas ID.
-     * @param ldzRenderer - LDZ renderer dependency.
+     * @param frameRenderer - Frame renderer dependency.
      * @param nprProgram - Selected NPR program module.
      * @param stateManager - Shared state manager.
      */
     constructor(
         canvasId: string,
-        ldzRenderer: LdzRenderer,
+        frameRenderer: FrameRenderer,
         nprProgram: NprProgramModule,
         stateManager: StateManager<AppState>,
     ) {
-        this.ldzRenderer = ldzRenderer;
+        this.frameRenderer = frameRenderer;
         this.nprProgram = nprProgram;
         this.stateManager = stateManager;
 
@@ -76,7 +76,7 @@ export class NprRenderer {
     }
 
     /**
-     * Renders NPR output from current LDZ data.
+     * Renders NPR output from current frame data.
      */
     async render(): Promise<void> {
         const queuedRender = this.renderQueue.then(async () => {
@@ -95,14 +95,16 @@ export class NprRenderer {
         try {
             const seed = this.stateManager.get("nprSeed");
             const dpi = this.stateManager.get("dpi");
-            const ldzData = this.ldzRenderer.getLdzData();
+            const frameData = this.frameRenderer.getFrameData();
 
             this.ctx.save();
             this.ctx.translate(0, this.height);
             this.ctx.scale(1, -1);
             this.nprProgram.renderFromLdz({
                 ctx2d: this.ctx,
-                ldzData,
+                ldzData: frameData.ldzData,
+                colorData: frameData.colorData,
+                colorDataTag: frameData.colorDataTag,
                 width: this.width,
                 height: this.height,
                 dpi,

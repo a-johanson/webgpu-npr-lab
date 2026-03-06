@@ -13,6 +13,18 @@ export type LdzGlobalUniforms = {
 };
 
 /**
+ * Declares whether a scene shader writes only LDZ or LDZ plus opaque color payload.
+ */
+export type LdzSceneOutputSpec =
+    | {
+          mode: "ldz-only";
+      }
+    | {
+          mode: "ldz-plus-color";
+          colorDataTag: string;
+      };
+
+/**
  * Scene-owned GPU resource set.
  */
 export interface LdzSceneGpuResources {
@@ -47,6 +59,11 @@ export interface LdzSceneModule<TCpuData> {
      * WGSL entry point name.
      */
     readonly fragmentEntryPoint: string;
+
+    /**
+     * Output shape produced by the scene fragment shader.
+     */
+    readonly outputSpec: LdzSceneOutputSpec;
 
     /**
      * Scene bind-group layout entries.

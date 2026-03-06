@@ -150,7 +150,7 @@ export async function setupApplication<TCpuData>(
         }
     });
 
-    await webgpuRenderer.renderLdzTiled();
+    await webgpuRenderer.renderFrameTiled();
     await nprRenderer.render();
 }
 

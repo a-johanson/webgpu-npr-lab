@@ -1,16 +1,16 @@
 import type { StateManager } from "../state-manager";
 import type { AppState } from "../types/app-state";
-import type { LdzRenderer } from "./ldz-renderer";
+import type { FrameData, FrameRenderer } from "./frame-renderer";
 import { WebGpuDebugPresenter } from "./webgpu/debug-presenter";
 import { WebGpuLdzPass } from "./webgpu/ldz-pass";
 import type { LdzGlobalUniforms, LdzSceneModule } from "./webgpu/ldz-scene-module";
 
 /**
- * WebGPU LDZ renderer orchestrating scene rendering, readback, and debug output.
+ * WebGPU frame renderer orchestrating scene rendering, readback, and debug output.
  *
  * @typeParam TCpuData - Scene CPU data payload type.
  */
-export class WebGpuRenderer<TCpuData> implements LdzRenderer {
+export class WebGpuRenderer<TCpuData> implements FrameRenderer {
     private static readonly TILE_SIZE_CAP = 1024;
     private static readonly MAX_DEBUG_DEPTH = 10.0;
     private static readonly LOG_TOTAL_RENDER_TIME = true;
@@ -18,18 +18,21 @@ export class WebGpuRenderer<TCpuData> implements LdzRenderer {
 
     private readonly stateManager: StateManager<AppState>;
     private readonly sceneModule: LdzSceneModule<TCpuData>;
+    private readonly sceneHasColorOutput: boolean;
+    private readonly colorDataTag: string | undefined;
     private readonly device: GPUDevice;
     private readonly queue: GPUQueue;
     private readonly ldzPass: WebGpuLdzPass<TCpuData>;
     private readonly debugPresenter: WebGpuDebugPresenter;
     private readonly maxTextureDimension2D: number;
-    private ldzRenderQueue: Promise<void> = Promise.resolve();
+    private frameRenderQueue: Promise<void> = Promise.resolve();
     private width = 1;
     private height = 1;
     private debugWidth = 1;
     private debugHeight = 1;
     private tileSize = 1;
     private ldzData = new Float32Array(4);
+    private colorData: Float32Array | undefined;
 
     /**
      * Creates and initializes a WebGPU renderer.
@@ -73,6 +76,11 @@ export class WebGpuRenderer<TCpuData> implements LdzRenderer {
     ) {
         this.stateManager = stateManager;
         this.sceneModule = sceneModule;
+        this.sceneHasColorOutput = this.sceneModule.outputSpec.mode === "ldz-plus-color";
+        this.colorDataTag =
+            this.sceneModule.outputSpec.mode === "ldz-plus-color"
+                ? this.sceneModule.outputSpec.colorDataTag
+                : undefined;
         this.device = device;
         this.queue = device.queue;
 
@@ -109,13 +117,13 @@ export class WebGpuRenderer<TCpuData> implements LdzRenderer {
 
         this.stateManager.subscribe(["gpuSeed"], async () => {
             this.rebuildSceneResources();
-            await this.renderLdzTiled();
+            await this.renderFrameTiled();
         });
 
         this.stateManager.subscribe(["dimensions"], async () => {
             this.adaptToDimensions();
             this.rebuildSceneResources();
-            await this.renderLdzTiled();
+            await this.renderFrameTiled();
         });
 
         this.stateManager.subscribe(["visualizationMode"], () => {
@@ -173,23 +181,26 @@ export class WebGpuRenderer<TCpuData> implements LdzRenderer {
         );
 
         this.ldzData = new Float32Array(this.width * this.height * 4);
+        this.colorData = this.sceneHasColorOutput
+            ? new Float32Array(this.width * this.height * 4)
+            : undefined;
     }
 
     /**
-     * Renders LDZ data in tiles and updates debug output.
+     * Renders frame data in tiles and updates debug output.
      */
-    async renderLdzTiled(): Promise<void> {
-        const queuedRender = this.ldzRenderQueue.then(async () => {
-            await this.renderLdzTiledNow();
+    async renderFrameTiled(): Promise<void> {
+        const queuedRender = this.frameRenderQueue.then(async () => {
+            await this.renderFrameTiledNow();
         });
-        this.ldzRenderQueue = queuedRender.catch(() => undefined);
+        this.frameRenderQueue = queuedRender.catch(() => undefined);
         return queuedRender;
     }
 
     /**
-     * Performs one LDZ tiled render pass.
+     * Performs one tiled frame render pass.
      */
-    private async renderLdzTiledNow(): Promise<void> {
+    private async renderFrameTiledNow(): Promise<void> {
         await this.stateManager.setState({ isRendering: true });
 
         try {
@@ -273,13 +284,24 @@ export class WebGpuRenderer<TCpuData> implements LdzRenderer {
                     );
 
                     this.queue.submit([encoder.finish()]);
-                    const readbackPromise = this.ldzPass.copyReadbackToLdzData(
-                        readback,
-                        this.ldzData,
-                        this.width,
-                        xStart,
-                        yStart,
-                    );
+                    const readbackPromise = (async (): Promise<void> => {
+                        await this.ldzPass.copyReadbackToLdzData(
+                            readback,
+                            this.ldzData,
+                            this.width,
+                            xStart,
+                            yStart,
+                        );
+                        if (this.colorData) {
+                            await this.ldzPass.copyReadbackToColorData(
+                                readback,
+                                this.colorData,
+                                this.width,
+                                xStart,
+                                yStart,
+                            );
+                        }
+                    })();
                     const pendingReadback: PendingReadback = {
                         promise: Promise.resolve(),
                         settled: false,
@@ -333,11 +355,17 @@ export class WebGpuRenderer<TCpuData> implements LdzRenderer {
     }
 
     /**
-     * Returns the latest LDZ data buffer.
+     * Returns the latest frame data buffers.
      *
-     * @returns LDZ data.
+     * @returns Frame data.
      */
-    getLdzData(): Float32Array {
-        return this.ldzData;
+    getFrameData(): FrameData {
+        return {
+            width: this.width,
+            height: this.height,
+            ldzData: this.ldzData,
+            colorData: this.colorData,
+            colorDataTag: this.colorDataTag,
+        };
     }
 }
