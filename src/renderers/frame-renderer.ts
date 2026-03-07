@@ -6,13 +6,9 @@ export type FrameData = {
     height: number;
     ldzData: Float32Array;
     /**
-     * Optional scene-defined color payload, packed as vec4 per pixel.
+     * Optional color payload, packed as 8-bit RGBA per pixel.
      */
-    colorData?: Float32Array;
-    /**
-     * Optional semantic tag describing how to interpret `colorData`.
-     */
-    colorDataTag?: string;
+    colorData?: Uint8Array;
 };
 
 /**

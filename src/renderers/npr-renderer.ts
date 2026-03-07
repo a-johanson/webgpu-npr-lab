@@ -104,7 +104,6 @@ export class NprRenderer {
                 ctx2d: this.ctx,
                 ldzData: frameData.ldzData,
                 colorData: frameData.colorData,
-                colorDataTag: frameData.colorDataTag,
                 width: this.width,
                 height: this.height,
                 dpi,

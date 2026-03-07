@@ -15,13 +15,18 @@ export type LdzGlobalUniforms = {
 /**
  * Declares whether a scene shader writes only LDZ or LDZ plus opaque color payload.
  */
+export type LdzSceneColorTextureFormat = "rgba8unorm" | "rgba8unorm-srgb";
+
+/**
+ * Declares whether a scene shader writes only LDZ or LDZ plus opaque color payload.
+ */
 export type LdzSceneOutputSpec =
     | {
           mode: "ldz-only";
       }
     | {
           mode: "ldz-plus-color";
-          colorDataTag: string;
+          colorTextureFormat: LdzSceneColorTextureFormat;
       };
 
 /**

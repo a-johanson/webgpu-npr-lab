@@ -4,8 +4,7 @@
 export type NprProgramRenderContext = {
     ctx2d: CanvasRenderingContext2D;
     ldzData: Float32Array;
-    colorData?: Float32Array;
-    colorDataTag?: string;
+    colorData?: Uint8Array;
     width: number;
     height: number;
     dpi: number;

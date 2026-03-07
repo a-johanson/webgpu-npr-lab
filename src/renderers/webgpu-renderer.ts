@@ -19,7 +19,6 @@ export class WebGpuRenderer<TCpuData> implements FrameRenderer {
     private readonly stateManager: StateManager<AppState>;
     private readonly sceneModule: LdzSceneModule<TCpuData>;
     private readonly sceneHasColorOutput: boolean;
-    private readonly colorDataTag: string | undefined;
     private readonly device: GPUDevice;
     private readonly queue: GPUQueue;
     private readonly ldzPass: WebGpuLdzPass<TCpuData>;
@@ -32,7 +31,7 @@ export class WebGpuRenderer<TCpuData> implements FrameRenderer {
     private debugHeight = 1;
     private tileSize = 1;
     private ldzData = new Float32Array(4);
-    private colorData: Float32Array | undefined;
+    private colorData: Uint8Array | undefined;
 
     /**
      * Creates and initializes a WebGPU renderer.
@@ -77,10 +76,6 @@ export class WebGpuRenderer<TCpuData> implements FrameRenderer {
         this.stateManager = stateManager;
         this.sceneModule = sceneModule;
         this.sceneHasColorOutput = this.sceneModule.outputSpec.mode === "ldz-plus-color";
-        this.colorDataTag =
-            this.sceneModule.outputSpec.mode === "ldz-plus-color"
-                ? this.sceneModule.outputSpec.colorDataTag
-                : undefined;
         this.device = device;
         this.queue = device.queue;
 
@@ -182,7 +177,7 @@ export class WebGpuRenderer<TCpuData> implements FrameRenderer {
 
         this.ldzData = new Float32Array(this.width * this.height * 4);
         this.colorData = this.sceneHasColorOutput
-            ? new Float32Array(this.width * this.height * 4)
+            ? new Uint8Array(this.width * this.height * 4)
             : undefined;
     }
 
@@ -365,7 +360,6 @@ export class WebGpuRenderer<TCpuData> implements FrameRenderer {
             height: this.height,
             ldzData: this.ldzData,
             colorData: this.colorData,
-            colorDataTag: this.colorDataTag,
         };
     }
 }
