@@ -14,8 +14,8 @@ struct VertexOut {
 struct GlobalUniforms {
     aspect: f32,
     seed: u32,
-    _pad0: u32,
-    _pad1: u32,
+    pixels_per_mm: f32,
+    viewport_height_px: f32,
     tile_offset: vec2f,
     tile_scale: vec2f,
 };
@@ -394,8 +394,8 @@ export class WebGpuLdzPass<TCpuData> {
         const uniformView = new DataView(packedUniforms);
         uniformView.setFloat32(0, uniforms.aspect, true);
         uniformView.setUint32(4, uniforms.seed >>> 0, true);
-        uniformView.setUint32(8, 0, true);
-        uniformView.setUint32(12, 0, true);
+        uniformView.setFloat32(8, uniforms.pixelsPerMm, true);
+        uniformView.setFloat32(12, uniforms.viewportHeightPx, true);
         uniformView.setFloat32(16, uniforms.tileOffsetX, true);
         uniformView.setFloat32(20, uniforms.tileOffsetY, true);
         uniformView.setFloat32(24, uniforms.tileScaleX, true);
@@ -530,6 +530,7 @@ export class WebGpuLdzPass<TCpuData> {
      * @param readback - Tile readback handle.
      * @param target - Full-size color target array.
      * @param targetWidth - Full image width.
+     * @param targetHeight - Full image height.
      * @param xStart - Tile X offset in full image.
      * @param yStart - Tile Y offset in full image.
      */
@@ -537,6 +538,7 @@ export class WebGpuLdzPass<TCpuData> {
         readback: LdzTileReadback,
         target: Uint8Array,
         targetWidth: number,
+        targetHeight: number,
         xStart: number,
         yStart: number,
     ): Promise<void> {
@@ -549,22 +551,19 @@ export class WebGpuLdzPass<TCpuData> {
             const mapped = readback.colorReadBuffer.getMappedRange();
             const source = new Uint8Array(mapped);
             const sourceRowStride = readback.colorPaddedBytesPerRow;
+            const bytesPerPixel = WebGpuLdzPass.CHANNEL_COUNT;
+            const rowByteCount = readback.validWidth * bytesPerPixel;
+            const topRowStart = targetHeight - yStart - readback.validHeight;
 
             for (let row = 0; row < readback.validHeight; row++) {
                 const sourceRowOffset = row * sourceRowStride;
-                const destinationRow = yStart + (readback.validHeight - 1 - row);
+                const destinationRow = topRowStart + row;
                 const destinationBase =
-                    (destinationRow * targetWidth + xStart) * WebGpuLdzPass.CHANNEL_COUNT;
-
-                for (let col = 0; col < readback.validWidth; col++) {
-                    const sourceBase = sourceRowOffset + col * WebGpuLdzPass.CHANNEL_COUNT;
-                    const destinationOffset =
-                        destinationBase + col * WebGpuLdzPass.CHANNEL_COUNT;
-
-                    for (let channel = 0; channel < WebGpuLdzPass.CHANNEL_COUNT; channel++) {
-                        target[destinationOffset + channel] = source[sourceBase + channel];
-                    }
-                }
+                    (destinationRow * targetWidth + xStart) * bytesPerPixel;
+                target.set(
+                    source.subarray(sourceRowOffset, sourceRowOffset + rowByteCount),
+                    destinationBase,
+                );
             }
         } finally {
             readback.colorReadBuffer.unmap();

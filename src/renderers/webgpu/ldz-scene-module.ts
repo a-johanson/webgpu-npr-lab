@@ -6,6 +6,8 @@ import type { AppDimensions } from "../../types/app-state";
 export type LdzGlobalUniforms = {
     aspect: number;
     seed: number;
+    pixelsPerMm: number;
+    viewportHeightPx: number;
     tileOffsetX: number;
     tileOffsetY: number;
     tileScaleX: number;

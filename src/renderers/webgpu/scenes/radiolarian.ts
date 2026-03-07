@@ -1,4 +1,11 @@
 import { prng_xor4096 } from "xor4096";
+import {
+    type Color3,
+    type GradientStop,
+    linearToOklab,
+    type OklabGradientStop,
+    srgbToLinear,
+} from "../../../npr/color";
 import type { AppDimensions } from "../../../types/app-state";
 import type { LdzSceneGpuResources, LdzSceneModule } from "../ldz-scene-module";
 
@@ -17,6 +24,11 @@ type RadiolarianParameters = {
     shellThickness: number;
     cornerSmoothness: number;
     csgSmoothness: number;
+    grainSizeMm: number;
+    grainLightnessAmplitude: number;
+    grainChromaAmplitude: number;
+    grainHueAmplitude: number;
+    minChromaForHueJitter: number;
 };
 
 const RADIOLARIAN_PARAMS: RadiolarianParameters = {
@@ -29,19 +41,51 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     shellThickness: 0.05,
     cornerSmoothness: 0.13 / 6.0,
     csgSmoothness: 0.05 / 6.0,
+    grainSizeMm: 0.2,
+    grainLightnessAmplitude: 0.05,
+    grainChromaAmplitude: 0.016,
+    grainHueAmplitude: (1.2 * Math.PI) / 180.0,
+    minChromaForHueJitter: 0.025,
 };
 
-const buildFragmentShader = (parameters: RadiolarianParameters): string => `
-struct VertexOut {
+const BG_STOPS: readonly GradientStop[] = [
+    { position: 0.07, srgb: [0.106, 0.019, 0.134] },
+    { position: 0.18, srgb: [0.282, 0.112, 0.302] },
+    { position: 0.3, srgb: [0.729, 0.268, 0.396] },
+    { position: 0.6, srgb: [0.921, 0.67, 0.582] },
+];
+
+const buildFragmentShader = (
+    parameters: RadiolarianParameters,
+    bgStops: readonly GradientStop[],
+): string => {
+    if (bgStops.length !== 4) {
+        throw new Error("Expected exactly 4 background stops");
+    }
+
+    const oklabBgStops: OklabGradientStop[] = bgStops.map((stop) => ({
+        position: stop.position,
+        oklab: linearToOklab(srgbToLinear(stop.srgb)),
+    }));
+    const floatLiteral = (v: number): string => v.toPrecision(8);
+    const vec3Literal = (v: Color3): string =>
+        `vec3f(${floatLiteral(v[0])}, ${floatLiteral(v[1])}, ${floatLiteral(v[2])})`;
+
+    return `struct VertexOut {
     @builtin(position) position: vec4f,
     @location(0) uv: vec2f,
+};
+
+struct FragmentOut {
+    @location(0) ldz: vec4f,
+    @location(1) color: vec4f,
 };
 
 struct GlobalUniforms {
     aspect: f32,
     seed: u32,
-    _pad0: u32,
-    _pad1: u32,
+    pixels_per_mm: f32,
+    viewport_height_px: f32,
     tile_offset: vec2f,
     tile_scale: vec2f,
 };
@@ -53,6 +97,11 @@ const SHELL_RADIUS: f32 = ${parameters.shellRadius};
 const SHELL_THICKNESS: f32 = ${parameters.shellThickness};
 const CORNER_SMOOTHNESS: f32 = ${parameters.cornerSmoothness};
 const CSG_SMOOTHNESS: f32 = ${parameters.csgSmoothness};
+const INVERSE_GRAIN_SIZE_MM: f32 = ${1.0 / parameters.grainSizeMm};
+const GRAIN_LIGHTNESS_AMPLITUDE: f32 = ${parameters.grainLightnessAmplitude};
+const GRAIN_CHROMA_AMPLITUDE: f32 = ${parameters.grainChromaAmplitude};
+const GRAIN_HUE_AMPLITUDE: f32 = ${parameters.grainHueAmplitude};
+const MIN_CHROMA_FOR_HUE_JITTER: f32 = ${parameters.minChromaForHueJitter};
 
 struct SiteData {
     site: vec4f,
@@ -223,8 +272,226 @@ fn calc_fresnel(view_direction: vec3f, normal: vec3f) -> f32 {
     return pow(1.0 - cos_theta, exponent);
 }
 
+fn oklab_to_linear_rgb(color: vec3f) -> vec3f {
+    let lightness = color.x;
+    let a = color.y;
+    let b = color.z;
+
+    var l = lightness + 0.3963377774 * a + 0.2158037573 * b;
+    var m = lightness - 0.1055613458 * a - 0.0638541728 * b;
+    var s = lightness - 0.0894841775 * a - 1.291485548 * b;
+
+    l = l * l * l;
+    m = m * m * m;
+    s = s * s * s;
+
+    return vec3f(
+        4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s
+    );
+}
+
+fn linear_to_srgb(color: vec3f) -> vec3f {
+    return mix(
+        12.92 * color,
+        1.055 * pow(clamp(color, vec3f(0.0), vec3f(1.0)), vec3f(1.0 / 2.4)) - vec3f(0.055),
+        step(vec3f(0.0031308), color)
+    );
+}
+
+fn oklab_to_oklch(lab: vec3f) -> vec3f {
+    let lightness = lab.x;
+    let a = lab.y;
+    let b = lab.z;
+    let chroma = length(vec2f(a, b));
+    let hue = atan2(b, a);
+    return vec3f(lightness, chroma, hue);
+}
+
+fn oklch_to_oklab(lch: vec3f) -> vec3f {
+    let lightness = lch.x;
+    let chroma = lch.y;
+    let hue = lch.z;
+    return vec3f(lightness, chroma * cos(hue), chroma * sin(hue));
+}
+
+fn sample_background_gradient_oklab(t: f32) -> vec3f {
+    let stop0 = ${floatLiteral(oklabBgStops[0].position)};
+    let stop1 = ${floatLiteral(oklabBgStops[1].position)};
+    let stop2 = ${floatLiteral(oklabBgStops[2].position)};
+    let stop3 = ${floatLiteral(oklabBgStops[3].position)};
+
+    let color0 = ${vec3Literal(oklabBgStops[0].oklab)};
+    let color1 = ${vec3Literal(oklabBgStops[1].oklab)};
+    let color2 = ${vec3Literal(oklabBgStops[2].oklab)};
+    let color3 = ${vec3Literal(oklabBgStops[3].oklab)};
+
+    if (t <= stop0) {
+        return color0;
+    }
+    if (t <= stop1) {
+        let segment_t = (t - stop0) / (stop1 - stop0);
+        return mix(color0, color1, segment_t);
+    }
+    if (t <= stop2) {
+        let segment_t = (t - stop1) / (stop2 - stop1);
+        return mix(color1, color2, segment_t);
+    }
+    if (t <= stop3) {
+        let segment_t = (t - stop2) / (stop3 - stop2);
+        return mix(color2, color3, segment_t);
+    }
+    return color3;
+}
+
+// Cf. https://www.shadertoy.com/view/XlGcRh
+fn pcg2d(v_in: vec2u) -> vec2u {
+    var v = v_in;
+
+    v = v * 1664525u + 1013904223u;
+
+    v.x += v.y * 1664525u;
+    v.y += v.x * 1664525u;
+
+    v ^= (v >> vec2u(16u));
+
+    v.x += v.y * 1664525u;
+    v.y += v.x * 1664525u;
+
+    v ^= (v >> vec2u(16u));
+
+    return v;
+}
+
+const GRAD2: array<vec2f, 12> = array<vec2f, 12>(
+    vec2f( 1.0,  1.0),
+    vec2f(-1.0,  1.0),
+    vec2f( 1.0, -1.0),
+
+    vec2f(-1.0, -1.0),
+    vec2f( 1.0,  0.0),
+    vec2f(-1.0,  0.0),
+
+    vec2f( 1.0,  0.0),
+    vec2f(-1.0,  0.0),
+    vec2f( 0.0,  1.0),
+
+    vec2f( 0.0, -1.0),
+    vec2f( 0.0,  1.0),
+    vec2f( 0.0, -1.0)
+);
+
+fn grad_index_2d(lattice: vec2i, seed: u32) -> u32 {
+    let p = vec2u(u32(lattice.x), u32(lattice.y));
+    let s = vec2u(seed, seed ^ 0x9E3779B9u); // 0x9E3779B9u = 2^32 / ((1 + sqrt(5)) / 2)
+    let h = pcg2d(p + s);
+    let v = h.x ^ h.y;
+    return v % 12u;
+}
+
+fn grad2(lattice: vec2i, seed: u32) -> vec2f {
+    return GRAD2[grad_index_2d(lattice, seed)];
+}
+
+// Adapted from https://github.com/jwagner/simplex-noise.js
+fn simplex_noise_2d(p: vec2f, seed: u32) -> f32 {
+    const F2: f32 = 0.3660254037844386;  // 0.5*(sqrt(3)-1)
+    const G2: f32 = 0.2113248654051871;  // (3-sqrt(3))/6
+
+    let s = (p.x + p.y) * F2;
+    let i = i32(floor(p.x + s));
+    let j = i32(floor(p.y + s));
+
+    let t = f32(i + j) * G2;
+
+    let x0 = p.x - (f32(i) - t);
+    let y0 = p.y - (f32(j) - t);
+
+    let i1: i32 = select(0, 1, x0 > y0);
+    let j1: i32 = select(1, 0, x0 > y0);
+
+    let x1 = x0 - f32(i1) + G2;
+    let y1 = y0 - f32(j1) + G2;
+
+    let x2 = x0 - 1.0 + 2.0 * G2;
+    let y2 = y0 - 1.0 + 2.0 * G2;
+
+    let ij0 = vec2i(i, j);
+    let ij1 = vec2i(i + i1, j + j1);
+    let ij2 = vec2i(i + 1,  j + 1);
+
+    var n0: f32 = 0.0;
+    var n1: f32 = 0.0;
+    var n2: f32 = 0.0;
+
+    var t0 = 0.5 - (x0 * x0 + y0 * y0);
+    if (t0 >= 0.0) {
+        let g0 = grad2(ij0, seed);
+        t0 = t0 * t0;
+        n0 = (t0 * t0) * dot(g0, vec2f(x0, y0));
+    }
+
+    var t1 = 0.5 - (x1 * x1 + y1 * y1);
+    if (t1 >= 0.0) {
+        let g1 = grad2(ij1, seed);
+        t1 = t1 * t1;
+        n1 = (t1 * t1) * dot(g1, vec2f(x1, y1));
+    }
+
+    var t2 = 0.5 - (x2 * x2 + y2 * y2);
+    if (t2 >= 0.0) {
+        let g2v = grad2(ij2, seed);
+        t2 = t2 * t2;
+        n2 = (t2 * t2) * dot(g2v, vec2f(x2, y2));
+    }
+
+    return 70.0 * (n0 + n1 + n2);
+}
+
+fn rotate(p: vec2f, cos_sin: vec2f) -> vec2f {
+    return vec2f(
+        p.x * cos_sin.x - p.y * cos_sin.y,
+        p.x * cos_sin.y + p.y * cos_sin.x
+    );
+}
+
+fn fbm3_simplex_2d(p: vec2f, rot_cos_sin: vec2f, seed: u32) -> f32 {
+    var amp: f32 = 1.0;
+    var freq: f32 = 1.0;
+    var sum: f32 = 0.0;
+    var q = p;
+    for (var i: u32 = 0u; i < 3u; i++) {
+        q = rotate(q, rot_cos_sin);
+        sum += amp * simplex_noise_2d(q * freq, seed + i);
+        freq = freq * 2.0; // lacunarity
+        amp = amp * 0.5; // persistence
+    }
+
+    // Normalization for three octaves with persistence = 0.5
+    let scale = 1.0 / (1.0 + 0.5 + 0.25);
+    return sum * scale;
+}
+
+fn grain_lch(lab: vec3f, grain_coord: vec2f, seed: u32) -> vec3f {
+    let lch = oklab_to_oklch(lab);
+    let lightness = lch.x;
+    let chroma = lch.y;
+    let hue = lch.z;
+
+    let l_noise = fbm3_simplex_2d(grain_coord, vec2f(3.0 / 5.0, 4.0 / 5.0), seed);
+    let c_noise = fbm3_simplex_2d((grain_coord + vec2f(5.2, 1.3)), vec2f(5.0 / 13.0, 12.0 / 13.0), seed + 17u);
+    let h_noise = fbm3_simplex_2d((grain_coord + vec2f(8.7, 3.8)), vec2f(8.0 / 17.0, 15.0 / 17.0), seed + 29u);
+
+    let l = clamp(lightness + GRAIN_LIGHTNESS_AMPLITUDE * l_noise, 0.0, 1.0);
+    let c = max(0.0, chroma + GRAIN_CHROMA_AMPLITUDE * c_noise);
+    let h = hue + select(0.0, GRAIN_HUE_AMPLITUDE * h_noise, c >= MIN_CHROMA_FOR_HUE_JITTER);
+
+    return oklch_to_oklab(vec3f(l, c, h));
+}
+
 @fragment
-fn main_fragment(in: VertexOut) -> @location(0) vec4f {
+fn main_fragment(in: VertexOut) -> FragmentOut {
     // Ray setup.
     let uv = in.uv * 2.0 - 1.0;
 
@@ -260,6 +527,7 @@ fn main_fragment(in: VertexOut) -> @location(0) vec4f {
     var luminance = 0.0;
     var direction = vec2f(0.0, 0.0);
     var depth = -1.0;
+    var color = vec3f(0.99, 0.97, 0.86); // color if the ray hits the SDF surface
 
     for (var step = 0; step < max_steps; step++) {
         let p = cam_pos + ray_dir * t;
@@ -299,9 +567,25 @@ fn main_fragment(in: VertexOut) -> @location(0) vec4f {
         t += step_scale * d;
     }
 
-    return vec4f(luminance, direction, depth);
+    if (depth < 0.0) {
+        let bg_oklab = sample_background_gradient_oklab(in.uv.y);
+        let pixel_coord = in.uv * vec2f(
+            global_uniforms.aspect * global_uniforms.viewport_height_px,
+            global_uniforms.viewport_height_px
+        );
+        let mm_per_pixel = 1.0 / global_uniforms.pixels_per_mm;
+        let grain_coord = pixel_coord * mm_per_pixel * INVERSE_GRAIN_SIZE_MM;
+        let bg_with_grain = grain_lch(bg_oklab, grain_coord, global_uniforms.seed);
+        color = linear_to_srgb(oklab_to_linear_rgb(bg_with_grain));
+    }
+
+    return FragmentOut(
+        vec4f(luminance, direction, depth),
+        vec4f(color, 1.0),
+    );
 }
 `;
+};
 
 /**
  * CPU-side data payload for the radiolarian scene.
@@ -341,12 +625,18 @@ class RadiolarianGpuResources implements LdzSceneGpuResources {
  * LDZ scene module for a radiolarian-like shell with contracted cell holes.
  */
 export class RadiolarianLdzSceneModule implements LdzSceneModule<RadiolarianCpuData> {
-    private static readonly FRAGMENT_SHADER = buildFragmentShader(RADIOLARIAN_PARAMS);
+    private static readonly FRAGMENT_SHADER = buildFragmentShader(
+        RADIOLARIAN_PARAMS,
+        BG_STOPS,
+    );
 
     readonly id = "radiolarian";
     readonly fragmentShader = RadiolarianLdzSceneModule.FRAGMENT_SHADER;
     readonly fragmentEntryPoint = "main_fragment";
-    readonly outputSpec = { mode: "ldz-only" } as const;
+    readonly outputSpec = {
+        mode: "ldz-plus-color",
+        colorTextureFormat: "rgba8unorm",
+    } as const;
     readonly bindGroupLayoutEntries: readonly GPUBindGroupLayoutEntry[] = [
         {
             binding: 0,

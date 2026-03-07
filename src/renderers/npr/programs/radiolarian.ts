@@ -1,5 +1,3 @@
-import { LinearGradient, linearToSrgb, oklabToLinear } from "../../../npr/color";
-import { FilmGrain } from "../../../npr/grain";
 import { outlinesFromLDZ } from "../../../npr/outlines";
 import { drawPolyline } from "../../../npr/polyline";
 import { flowFieldStreamlines } from "../../../npr/streamlines";
@@ -17,7 +15,7 @@ export class RadiolarianNprProgramModule implements NprProgramModule {
      * @param context - Render context values.
      */
     renderFromLdz(context: NprProgramRenderContext): void {
-        const { ctx2d, ldzData, width, height, dpi, seed } = context;
+        const { ctx2d, ldzData, colorData, width, height, dpi, seed } = context;
         if (
             !Number.isFinite(width) ||
             !Number.isFinite(height) ||
@@ -28,6 +26,11 @@ export class RadiolarianNprProgramModule implements NprProgramModule {
         ) {
             throw new Error(
                 `Invalid radiolarian render inputs: width=${String(width)}, height=${String(height)}, dpi=${String(dpi)}`,
+            );
+        }
+        if (!colorData) {
+            throw new Error(
+                "Radiolarian program requires colorData from the GPU scene output",
             );
         }
 
@@ -67,51 +70,9 @@ export class RadiolarianNprProgramModule implements NprProgramModule {
         ctx2d.lineCap = "round";
         ctx2d.lineJoin = "round";
 
-        const backgroundGradient = new LinearGradient([
-            { position: 0.07, srgb: [0.106, 0.019, 0.134] },
-            { position: 0.18, srgb: [0.282, 0.112, 0.302] },
-            { position: 0.3, srgb: [0.729, 0.268, 0.396] },
-            { position: 0.6, srgb: [0.921, 0.67, 0.582] },
-        ]);
-        const backgroundGrain = new FilmGrain({
-            seed: `${seed}:background-grain`,
-            pixelsPerMm,
-            grainSizeMm: 0.2,
-            lightnessAmplitude: 0.05,
-            chromaAmplitude: 0.016,
-            hueAmplitude: (1.2 * Math.PI) / 180.0,
-            octaves: 3,
-            persistence: 0.55,
-            lacunarity: 2.0,
-            minChromaForHueJitter: 0.025,
-        });
-        const rFill = Math.round(0.99 * 255);
-        const gFill = Math.round(0.97 * 255);
-        const bFill = Math.round(0.86 * 255);
         const imgData = ctx2d.createImageData(width, height, { colorSpace: "srgb" });
         const data = imgData.data;
-        // const widthDenominator = Math.max(width - 1, 1);
-        const heightDenominator = Math.max(height - 1, 1);
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                const idxBase = ((height - 1 - y) * width + x) * 4;
-                const z = ldzData[(y * width + x) * 4 + 3];
-                if (z < 0.0) {
-                    const t = y / heightDenominator;
-                    const baseOklab = backgroundGradient.sampleOklab(t);
-                    const jitteredOklab = backgroundGrain.applyToOklab(baseOklab, x, y);
-                    const rgbBg = linearToSrgb(oklabToLinear(jitteredOklab));
-                    data[idxBase] = Math.round(rgbBg[0] * 255);
-                    data[idxBase + 1] = Math.round(rgbBg[1] * 255);
-                    data[idxBase + 2] = Math.round(rgbBg[2] * 255);
-                } else {
-                    data[idxBase] = rFill;
-                    data[idxBase + 1] = gFill;
-                    data[idxBase + 2] = bFill;
-                }
-                data[idxBase + 3] = 255;
-            }
-        }
+        data.set(colorData);
         ctx2d.putImageData(imgData, 0, 0);
 
         for (const line of crosslines) {

@@ -221,6 +221,9 @@ export class WebGpuRenderer<TCpuData> implements FrameRenderer {
             this.ldzPass.configureReadbackSlots(readbackSlotCount);
             const xTileScale = this.tileSize / this.width;
             const yTileScale = this.tileSize / this.height;
+            const pixelsPerMmRaw = this.stateManager.get("dpi") / 25.4;
+            const pixelsPerMm =
+                Number.isFinite(pixelsPerMmRaw) && pixelsPerMmRaw > 0.0 ? pixelsPerMmRaw : 1.0;
 
             const collectSettledReadbacks = (): void => {
                 for (let index = pendingReadbacks.length - 1; index >= 0; index--) {
@@ -247,6 +250,8 @@ export class WebGpuRenderer<TCpuData> implements FrameRenderer {
                     const globalUniforms: LdzGlobalUniforms = {
                         aspect: this.height > 0 ? this.width / this.height : 1.0,
                         seed,
+                        pixelsPerMm,
+                        viewportHeightPx: this.height,
                         tileOffsetX: xTile * xTileScale,
                         tileOffsetY: yTile * yTileScale,
                         tileScaleX: xTileScale * (validWidth / this.tileSize),
@@ -292,6 +297,7 @@ export class WebGpuRenderer<TCpuData> implements FrameRenderer {
                                 readback,
                                 this.colorData,
                                 this.width,
+                                this.height,
                                 xStart,
                                 yStart,
                             );

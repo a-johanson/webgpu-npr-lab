@@ -14,9 +14,9 @@ export type GradientStop = {
 };
 
 /**
- * An internal color stop represented in OKLAB.
+ * Color stop represented in OKLAB.
  */
-type OklabGradientStop = {
+export type OklabGradientStop = {
     position: number;
     oklab: Color3;
 };
