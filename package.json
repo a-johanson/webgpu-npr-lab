@@ -26,8 +26,5 @@
         "@webgpu/types": "0.1.69",
         "esbuild": "0.27.3",
         "typescript": "5.9.3"
-    },
-    "dependencies": {
-        "simplex-noise": "4.0.3"
     }
 }
