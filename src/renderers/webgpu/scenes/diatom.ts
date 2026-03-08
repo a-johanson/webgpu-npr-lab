@@ -279,6 +279,7 @@ export class DiatomLdzSceneModule implements LdzSceneModule<DiatomCpuData> {
     readonly id = "diatom";
     readonly fragmentShader = WGSL_FRAGMENT_SHADER;
     readonly fragmentEntryPoint = "main_fragment";
+    readonly outputSpec = { mode: "ldz-only" } as const;
     readonly bindGroupLayoutEntries: readonly GPUBindGroupLayoutEntry[] = [
         {
             binding: 0,

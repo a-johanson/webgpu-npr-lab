@@ -6,11 +6,30 @@ import type { AppDimensions } from "../../types/app-state";
 export type LdzGlobalUniforms = {
     aspect: number;
     seed: number;
+    pixelsPerMm: number;
+    viewportHeightPx: number;
     tileOffsetX: number;
     tileOffsetY: number;
     tileScaleX: number;
     tileScaleY: number;
 };
+
+/**
+ * Declares whether a scene shader writes only LDZ or LDZ plus opaque color payload.
+ */
+export type LdzSceneColorTextureFormat = "rgba8unorm" | "rgba8unorm-srgb";
+
+/**
+ * Declares whether a scene shader writes only LDZ or LDZ plus opaque color payload.
+ */
+export type LdzSceneOutputSpec =
+    | {
+          mode: "ldz-only";
+      }
+    | {
+          mode: "ldz-plus-color";
+          colorTextureFormat: LdzSceneColorTextureFormat;
+      };
 
 /**
  * Scene-owned GPU resource set.
@@ -47,6 +66,11 @@ export interface LdzSceneModule<TCpuData> {
      * WGSL entry point name.
      */
     readonly fragmentEntryPoint: string;
+
+    /**
+     * Output shape produced by the scene fragment shader.
+     */
+    readonly outputSpec: LdzSceneOutputSpec;
 
     /**
      * Scene bind-group layout entries.

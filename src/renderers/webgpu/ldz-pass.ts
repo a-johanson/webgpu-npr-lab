@@ -14,8 +14,8 @@ struct VertexOut {
 struct GlobalUniforms {
     aspect: f32,
     seed: u32,
-    _pad0: u32,
-    _pad1: u32,
+    pixels_per_mm: f32,
+    viewport_height_px: f32,
     tile_offset: vec2f,
     tile_scale: vec2f,
 };
@@ -46,14 +46,17 @@ fn main_vertex(@builtin(vertex_index) vertex_index: u32) -> VertexOut {
  */
 export type LdzTileReadback = {
     slotIndex: number;
-    readBuffer: GPUBuffer;
-    paddedBytesPerRow: number;
+    ldzReadBuffer: GPUBuffer;
+    colorReadBuffer: GPUBuffer | null;
+    ldzPaddedBytesPerRow: number;
+    colorPaddedBytesPerRow: number | null;
     validWidth: number;
     validHeight: number;
 };
 
 type LdzReadbackSlot = {
-    buffer: GPUBuffer;
+    ldzBuffer: GPUBuffer;
+    colorBuffer: GPUBuffer | null;
     inUse: boolean;
 };
 
@@ -65,22 +68,27 @@ type LdzReadbackSlot = {
 export class WebGpuLdzPass<TCpuData> {
     private static readonly GLOBAL_UNIFORM_FLOAT_COUNT = 8;
     private static readonly CHANNEL_COUNT = 4;
-    private static readonly BYTES_PER_CHANNEL = Float32Array.BYTES_PER_ELEMENT;
+    private static readonly FLOAT32_BYTES_PER_VALUE = Float32Array.BYTES_PER_ELEMENT;
+    private static readonly UINT8_BYTES_PER_VALUE = Uint8Array.BYTES_PER_ELEMENT;
     private static readonly READBACK_ALIGNMENT_BYTES = 256;
     static readonly OUTPUT_TEXTURE_FORMAT: GPUTextureFormat = "rgba32float";
 
     private readonly device: GPUDevice;
     private readonly queue: GPUQueue;
     private readonly sceneModule: LdzSceneModule<TCpuData>;
+    private readonly hasColorOutput: boolean;
+    private readonly colorTextureFormat: GPUTextureFormat | null;
     private readonly pipeline: GPURenderPipeline;
     private readonly globalUniformBuffer: GPUBuffer;
     private readonly globalBindGroup: GPUBindGroup;
     private sceneBindGroup: GPUBindGroup;
     private sceneGpuResources: LdzSceneGpuResources;
     private tileTexture: GPUTexture | null = null;
+    private colorTileTexture: GPUTexture | null = null;
     private tileSize = 1;
     private readbackSlots: LdzReadbackSlot[] = [];
-    private readbackPaddedBytesPerRow = 0;
+    private ldzReadbackPaddedBytesPerRow = 0;
+    private colorReadbackPaddedBytesPerRow: number | null = null;
 
     /**
      * Creates an LDZ pass.
@@ -99,6 +107,11 @@ export class WebGpuLdzPass<TCpuData> {
         this.device = device;
         this.queue = device.queue;
         this.sceneModule = sceneModule;
+        this.hasColorOutput = this.sceneModule.outputSpec.mode === "ldz-plus-color";
+        this.colorTextureFormat =
+            this.sceneModule.outputSpec.mode === "ldz-plus-color"
+                ? this.sceneModule.outputSpec.colorTextureFormat
+                : null;
 
         const globalBindGroupLayout = this.device.createBindGroupLayout({
             entries: [
@@ -126,6 +139,12 @@ export class WebGpuLdzPass<TCpuData> {
             code: this.sceneModule.fragmentShader,
             label: `ldz-fragment-${this.sceneModule.id}`,
         });
+        const colorTargets: GPUColorTargetState[] = [
+            { format: WebGpuLdzPass.OUTPUT_TEXTURE_FORMAT },
+        ];
+        if (this.hasColorOutput && this.colorTextureFormat) {
+            colorTargets.push({ format: this.colorTextureFormat });
+        }
 
         this.pipeline = this.device.createRenderPipeline({
             layout: pipelineLayout,
@@ -136,7 +155,7 @@ export class WebGpuLdzPass<TCpuData> {
             fragment: {
                 module: fragmentModule,
                 entryPoint: this.sceneModule.fragmentEntryPoint,
-                targets: [{ format: WebGpuLdzPass.OUTPUT_TEXTURE_FORMAT }],
+                targets: colorTargets,
             },
             primitive: {
                 topology: "triangle-strip",
@@ -144,7 +163,9 @@ export class WebGpuLdzPass<TCpuData> {
         });
 
         this.globalUniformBuffer = this.device.createBuffer({
-            size: WebGpuLdzPass.GLOBAL_UNIFORM_FLOAT_COUNT * WebGpuLdzPass.BYTES_PER_CHANNEL,
+            size:
+                WebGpuLdzPass.GLOBAL_UNIFORM_FLOAT_COUNT *
+                WebGpuLdzPass.FLOAT32_BYTES_PER_VALUE,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
         this.globalBindGroup = this.device.createBindGroup({
@@ -181,6 +202,10 @@ export class WebGpuLdzPass<TCpuData> {
         if (this.tileTexture) {
             this.tileTexture.destroy();
         }
+        if (this.colorTileTexture) {
+            this.colorTileTexture.destroy();
+            this.colorTileTexture = null;
+        }
 
         this.tileTexture = this.device.createTexture({
             size: {
@@ -193,6 +218,23 @@ export class WebGpuLdzPass<TCpuData> {
                 GPUTextureUsage.COPY_SRC |
                 GPUTextureUsage.TEXTURE_BINDING,
         });
+
+        if (this.hasColorOutput) {
+            if (!this.colorTextureFormat) {
+                throw new Error("Color texture format must be provided for color output");
+            }
+            this.colorTileTexture = this.device.createTexture({
+                size: {
+                    width: this.tileSize,
+                    height: this.tileSize,
+                },
+                format: this.colorTextureFormat,
+                usage:
+                    GPUTextureUsage.RENDER_ATTACHMENT |
+                    GPUTextureUsage.COPY_SRC |
+                    GPUTextureUsage.TEXTURE_BINDING,
+            });
+        }
     }
 
     /**
@@ -235,18 +277,39 @@ export class WebGpuLdzPass<TCpuData> {
 
         this.resetReadbackSlots();
 
-        const unpaddedBytesPerRow =
-            this.tileSize * WebGpuLdzPass.CHANNEL_COUNT * WebGpuLdzPass.BYTES_PER_CHANNEL;
-        this.readbackPaddedBytesPerRow =
-            Math.ceil(unpaddedBytesPerRow / WebGpuLdzPass.READBACK_ALIGNMENT_BYTES) *
+        const ldzUnpaddedBytesPerRow =
+            this.tileSize *
+            WebGpuLdzPass.CHANNEL_COUNT *
+            WebGpuLdzPass.FLOAT32_BYTES_PER_VALUE;
+        this.ldzReadbackPaddedBytesPerRow =
+            Math.ceil(ldzUnpaddedBytesPerRow / WebGpuLdzPass.READBACK_ALIGNMENT_BYTES) *
             WebGpuLdzPass.READBACK_ALIGNMENT_BYTES;
-        const readBufferSize = this.readbackPaddedBytesPerRow * this.tileSize;
+        const ldzReadBufferSize = this.ldzReadbackPaddedBytesPerRow * this.tileSize;
+
+        if (this.hasColorOutput) {
+            const colorUnpaddedBytesPerRow =
+                this.tileSize *
+                WebGpuLdzPass.CHANNEL_COUNT *
+                WebGpuLdzPass.UINT8_BYTES_PER_VALUE;
+            this.colorReadbackPaddedBytesPerRow =
+                Math.ceil(colorUnpaddedBytesPerRow / WebGpuLdzPass.READBACK_ALIGNMENT_BYTES) *
+                WebGpuLdzPass.READBACK_ALIGNMENT_BYTES;
+        } else {
+            this.colorReadbackPaddedBytesPerRow = null;
+        }
 
         this.readbackSlots = Array.from({ length: normalizedSlotCount }, () => ({
-            buffer: this.device.createBuffer({
-                size: readBufferSize,
+            ldzBuffer: this.device.createBuffer({
+                size: ldzReadBufferSize,
                 usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
             }),
+            colorBuffer:
+                this.hasColorOutput && this.colorReadbackPaddedBytesPerRow !== null
+                    ? this.device.createBuffer({
+                          size: this.colorReadbackPaddedBytesPerRow * this.tileSize,
+                          usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+                      })
+                    : null,
             inUse: false,
         }));
     }
@@ -285,10 +348,14 @@ export class WebGpuLdzPass<TCpuData> {
      */
     private resetReadbackSlots(): void {
         for (const slot of this.readbackSlots) {
-            slot.buffer.destroy();
+            slot.ldzBuffer.destroy();
+            if (slot.colorBuffer) {
+                slot.colorBuffer.destroy();
+            }
         }
         this.readbackSlots = [];
-        this.readbackPaddedBytesPerRow = 0;
+        this.ldzReadbackPaddedBytesPerRow = 0;
+        this.colorReadbackPaddedBytesPerRow = null;
     }
 
     /**
@@ -310,6 +377,9 @@ export class WebGpuLdzPass<TCpuData> {
         if (!this.tileTexture) {
             throw new Error("Tile texture has not been initialized");
         }
+        if (this.hasColorOutput && !this.colorTileTexture) {
+            throw new Error("Color tile texture has not been initialized");
+        }
         const slot = this.readbackSlots[slotIndex];
         if (!slot) {
             throw new Error(`Invalid readback slot index: ${slotIndex}`);
@@ -319,30 +389,41 @@ export class WebGpuLdzPass<TCpuData> {
         }
 
         const packedUniforms = new ArrayBuffer(
-            WebGpuLdzPass.GLOBAL_UNIFORM_FLOAT_COUNT * WebGpuLdzPass.BYTES_PER_CHANNEL,
+            WebGpuLdzPass.GLOBAL_UNIFORM_FLOAT_COUNT * WebGpuLdzPass.FLOAT32_BYTES_PER_VALUE,
         );
         const uniformView = new DataView(packedUniforms);
         uniformView.setFloat32(0, uniforms.aspect, true);
         uniformView.setUint32(4, uniforms.seed >>> 0, true);
-        uniformView.setUint32(8, 0, true);
-        uniformView.setUint32(12, 0, true);
+        uniformView.setFloat32(8, uniforms.pixelsPerMm, true);
+        uniformView.setFloat32(12, uniforms.viewportHeightPx, true);
         uniformView.setFloat32(16, uniforms.tileOffsetX, true);
         uniformView.setFloat32(20, uniforms.tileOffsetY, true);
         uniformView.setFloat32(24, uniforms.tileScaleX, true);
         uniformView.setFloat32(28, uniforms.tileScaleY, true);
         this.queue.writeBuffer(this.globalUniformBuffer, 0, packedUniforms);
 
-        const paddedBytesPerRow = this.readbackPaddedBytesPerRow;
+        const ldzPaddedBytesPerRow = this.ldzReadbackPaddedBytesPerRow;
+        const colorPaddedBytesPerRow = this.colorReadbackPaddedBytesPerRow;
+
+        const colorAttachments: GPURenderPassColorAttachment[] = [
+            {
+                view: this.tileTexture.createView(),
+                loadOp: "clear",
+                storeOp: "store",
+                clearValue: [0, 0, 0, 0],
+            },
+        ];
+        if (this.hasColorOutput && this.colorTileTexture) {
+            colorAttachments.push({
+                view: this.colorTileTexture.createView(),
+                loadOp: "clear",
+                storeOp: "store",
+                clearValue: [0, 0, 0, 0],
+            });
+        }
 
         const renderPass = encoder.beginRenderPass({
-            colorAttachments: [
-                {
-                    view: this.tileTexture.createView(),
-                    loadOp: "clear",
-                    storeOp: "store",
-                    clearValue: [0, 0, 0, 0],
-                },
-            ],
+            colorAttachments,
         });
         renderPass.setPipeline(this.pipeline);
         renderPass.setBindGroup(0, this.globalBindGroup);
@@ -358,8 +439,8 @@ export class WebGpuLdzPass<TCpuData> {
                 origin: { x: 0, y: 0, z: 0 },
             },
             {
-                buffer: slot.buffer,
-                bytesPerRow: paddedBytesPerRow,
+                buffer: slot.ldzBuffer,
+                bytesPerRow: ldzPaddedBytesPerRow,
                 rowsPerImage: validHeight,
             },
             {
@@ -369,10 +450,31 @@ export class WebGpuLdzPass<TCpuData> {
             },
         );
 
+        if (this.colorTileTexture && slot.colorBuffer && colorPaddedBytesPerRow !== null) {
+            encoder.copyTextureToBuffer(
+                {
+                    texture: this.colorTileTexture,
+                    origin: { x: 0, y: 0, z: 0 },
+                },
+                {
+                    buffer: slot.colorBuffer,
+                    bytesPerRow: colorPaddedBytesPerRow,
+                    rowsPerImage: validHeight,
+                },
+                {
+                    width: validWidth,
+                    height: validHeight,
+                    depthOrArrayLayers: 1,
+                },
+            );
+        }
+
         return {
             slotIndex,
-            readBuffer: slot.buffer,
-            paddedBytesPerRow,
+            ldzReadBuffer: slot.ldzBuffer,
+            colorReadBuffer: slot.colorBuffer,
+            ldzPaddedBytesPerRow,
+            colorPaddedBytesPerRow,
             validWidth,
             validHeight,
         };
@@ -394,12 +496,12 @@ export class WebGpuLdzPass<TCpuData> {
         xStart: number,
         yStart: number,
     ): Promise<void> {
-        await readback.readBuffer.mapAsync(GPUMapMode.READ);
+        await readback.ldzReadBuffer.mapAsync(GPUMapMode.READ);
         try {
-            const mapped = readback.readBuffer.getMappedRange();
+            const mapped = readback.ldzReadBuffer.getMappedRange();
             const source = new Float32Array(mapped);
             const sourceRowStride =
-                readback.paddedBytesPerRow / WebGpuLdzPass.BYTES_PER_CHANNEL;
+                readback.ldzPaddedBytesPerRow / WebGpuLdzPass.FLOAT32_BYTES_PER_VALUE;
 
             for (let row = 0; row < readback.validHeight; row++) {
                 const sourceRowOffset = row * sourceRowStride;
@@ -418,7 +520,53 @@ export class WebGpuLdzPass<TCpuData> {
                 }
             }
         } finally {
-            readback.readBuffer.unmap();
+            readback.ldzReadBuffer.unmap();
+        }
+    }
+
+    /**
+     * Maps one tile readback and copies it into full color data.
+     *
+     * @param readback - Tile readback handle.
+     * @param target - Full-size color target array.
+     * @param targetWidth - Full image width.
+     * @param targetHeight - Full image height.
+     * @param xStart - Tile X offset in full image.
+     * @param yStart - Tile Y offset in full image.
+     */
+    async copyReadbackToColorData(
+        readback: LdzTileReadback,
+        target: Uint8Array,
+        targetWidth: number,
+        targetHeight: number,
+        xStart: number,
+        yStart: number,
+    ): Promise<void> {
+        if (!readback.colorReadBuffer || readback.colorPaddedBytesPerRow === null) {
+            return;
+        }
+
+        await readback.colorReadBuffer.mapAsync(GPUMapMode.READ);
+        try {
+            const mapped = readback.colorReadBuffer.getMappedRange();
+            const source = new Uint8Array(mapped);
+            const sourceRowStride = readback.colorPaddedBytesPerRow;
+            const bytesPerPixel = WebGpuLdzPass.CHANNEL_COUNT;
+            const rowByteCount = readback.validWidth * bytesPerPixel;
+            const topRowStart = targetHeight - yStart - readback.validHeight;
+
+            for (let row = 0; row < readback.validHeight; row++) {
+                const sourceRowOffset = row * sourceRowStride;
+                const destinationRow = topRowStart + row;
+                const destinationBase =
+                    (destinationRow * targetWidth + xStart) * bytesPerPixel;
+                target.set(
+                    source.subarray(sourceRowOffset, sourceRowOffset + rowByteCount),
+                    destinationBase,
+                );
+            }
+        } finally {
+            readback.colorReadBuffer.unmap();
         }
     }
 

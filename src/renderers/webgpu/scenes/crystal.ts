@@ -292,6 +292,7 @@ export class CrystalLdzSceneModule implements LdzSceneModule<CrystalCpuData> {
     readonly id = "crystal";
     readonly fragmentShader = WGSL_FRAGMENT_SHADER;
     readonly fragmentEntryPoint = "main_fragment";
+    readonly outputSpec = { mode: "ldz-only" } as const;
     readonly bindGroupLayoutEntries: readonly GPUBindGroupLayoutEntry[] = [
         {
             binding: 0,
