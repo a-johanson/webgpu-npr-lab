@@ -1,6 +1,6 @@
 # Non-photorealistic rendering (NPR) based on WebGPU
 
-This repository is a browser-based NPR lab for rendering static generative art images (no animations). It uses a CPU -> WebGPU -> CPU pipeline: scene modules typically build scene-specific CPU data first, upload it to GPU buffers, render tiled LDZ data (luminance, direction, and depth) plus optional color data on the GPU, and then return the frame payload to CPU-side NPR code for the final 2D canvas render. The final stage stays on the CPU because many NPR effects here are non-local and benefit from whole-image algorithms such as streamline tracing, stochastic stippling, and outline extraction.
+This repository is a browser-based NPR lab for rendering static generative art images (no animations). It uses a CPU -> WebGPU -> CPU pipeline: scene modules typically build scene-specific CPU data first, upload it to GPU buffers, and render through a fixed fullscreen WebGPU pipeline whose scene-specific customization surface is the fragment shader. That GPU stage produces tiled luminance, direction, and depth (LDZ) data plus optional color data, and then returns the frame payload to CPU-side NPR code for the final 2D canvas render. The final stage stays on the CPU because many NPR effects here are non-local and benefit from whole-image algorithms such as streamline tracing, stochastic stippling, and outline extraction.
 
 ## Structural overview
 
@@ -17,10 +17,10 @@ src/
 		webgpu-renderer.ts            tiled WebGPU orchestration and debug-canvas integration
 		npr-renderer.ts               2D canvas orchestration for the active NPR program
 		webgpu/
-			ldz-pass.ts                 core GPU pipeline, uniforms, textures, and readback
+			ldz-pass.ts                 fixed fullscreen GPU pipeline, uniforms, textures, and readback
 			debug-presenter.ts          debug texture composition and presentation for debugCanvas
 			ldz-scene-module.ts         scene interface and LDZ/color output contract
-			scenes/                     scene-specific WGSL, CPU scene data, and GPU resource setup
+			scenes/                     scene-specific fragment WGSL, CPU scene data, and GPU resource setup
 		npr/
 			npr-program-module.ts       NPR program interface
 			programs/                   program-specific 2D rendering from LDZ data
@@ -39,7 +39,7 @@ The runtime flow is:
 
 * `src/main.ts` selects one `LdzSceneModule` and one `NprProgramModule`.
 * `src/app-runtime.ts` creates `StateManager<AppState>`, binds DOM controls from `public/index.html`, then instantiates `WebGpuRenderer` and `NprRenderer`.
-* The selected `LdzSceneModule` typically computes scene-specific CPU data first, and `WebGpuLdzPass` uploads that data into GPU resources before rendering.
+* The selected `LdzSceneModule` typically computes scene-specific CPU data first, and `WebGpuLdzPass` uploads that data into a fixed fullscreen WebGPU pipeline whose scene-specific customization lives in the fragment shader.
 * `WebGpuRenderer` renders tiled LDZ output, optionally with scene color data, and exposes `FrameData`.
 * `NprRenderer` reads `FrameData` and invokes the selected CPU `NprProgramModule` to paint the final 2D canvas; this stage stays on the CPU because the NPR effects used here are often non-local.
 
@@ -51,7 +51,7 @@ Use these entry points to avoid broad file reads:
 * Change UI controls or render-trigger behavior: read `public/index.html`, then `src/app-runtime.ts`; read `src/types/app-state.ts` only if the state shape changes.
 * Change app-wide state/subscription behavior: read `src/state-manager.ts` and `src/app-runtime.ts`.
 * Change the shared frame payload, tiling, readback, or debug visualization: read `src/renderers/frame-renderer.ts`, `src/renderers/webgpu-renderer.ts`, `src/renderers/webgpu/ldz-pass.ts`, and `src/renderers/webgpu/debug-presenter.ts`.
-* Change scene geometry, WGSL, or GPU resource setup: read `src/renderers/webgpu/ldz-scene-module.ts`, then the closest file in `src/renderers/webgpu/scenes/`.
+* Change scene geometry, scene fragment WGSL, or GPU resource setup: read `src/renderers/webgpu/ldz-scene-module.ts`, then the closest file in `src/renderers/webgpu/scenes/`.
 * Change NPR appearance on the 2D canvas: read `src/renderers/npr/npr-program-module.ts`, then the closest file in `src/renderers/npr/programs/`, then only the helper files it imports from `src/npr/`.
 * Change flow hatching: start with `src/npr/streamlines.ts`; current callers are the diatom and radiolarian NPR programs.
 * Change stippling: start with `src/npr/stippling.ts`; current callers are the crystal and shell NPR programs.
@@ -63,6 +63,7 @@ Use these entry points to avoid broad file reads:
 Practical reading rules:
 
 * Do not read every scene or every NPR program by default. Start with `src/main.ts` to find the active pair, then open only the matching implementation and its interface.
+* For scene work, assume the primary customization surface is the scene module's fragment shader plus its CPU-prepared buffers; only broaden to `src/renderers/webgpu/ldz-pass.ts` when shared pipeline structure, bindings, or readback behavior must change.
 * When adding a new scene, read `src/renderers/webgpu/ldz-scene-module.ts` and one closest existing scene, not all four scenes.
 * When adding a new NPR program, read `src/renderers/npr/npr-program-module.ts` and one closest existing program, then only the algorithm helpers it calls.
 * Same-stem names (`crystal`, `diatom`, `radiolarian`, `shell`) indicate paired GPU and NPR modules. Read both only when a change crosses the GPU/CPU boundary.
