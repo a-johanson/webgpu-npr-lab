@@ -12,11 +12,11 @@ import type { LdzSceneGpuResources, LdzSceneModule } from "../ldz-scene-module";
 type Vec3 = readonly [number, number, number];
 
 /**
- * Parameters that control radiolarian structure and look.
+ * Parameters that control one radiolarian shell.
  */
-type RadiolarianParameters = {
+type RadiolarianShapeParameters = {
+    center: Vec3;
     pointCount: number;
-    maxNeighbors: number;
     jitterStrength: number;
     contractionMargin: number;
     corridorScale: number;
@@ -24,6 +24,15 @@ type RadiolarianParameters = {
     shellThickness: number;
     cornerSmoothness: number;
     csgSmoothness: number;
+    seedOffset: number;
+};
+
+/**
+ * Parameters that control radiolarian scene generation and look.
+ */
+type RadiolarianSceneParameters = {
+    maxNeighbors: number;
+    shapes: readonly RadiolarianShapeParameters[];
     grainSizeMm: number;
     grainLightnessAmplitude: number;
     grainChromaAmplitude: number;
@@ -31,16 +40,22 @@ type RadiolarianParameters = {
     minChromaForHueJitter: number;
 };
 
-const RADIOLARIAN_PARAMS: RadiolarianParameters = {
-    pointCount: 100,
+const RADIOLARIAN_PARAMS: RadiolarianSceneParameters = {
     maxNeighbors: 8,
-    jitterStrength: 0.8,
-    contractionMargin: 0.02,
-    corridorScale: 1.5,
-    shellRadius: 1.0,
-    shellThickness: 0.05,
-    cornerSmoothness: 0.13 / 6.0,
-    csgSmoothness: 0.05 / 6.0,
+    shapes: [
+        {
+            center: [0.0, 0.0, 0.0],
+            pointCount: 100,
+            jitterStrength: 0.8,
+            contractionMargin: 0.02,
+            corridorScale: 1.5,
+            shellRadius: 1.0,
+            shellThickness: 0.05,
+            cornerSmoothness: 0.13 / 6.0,
+            csgSmoothness: 0.05 / 6.0,
+            seedOffset: 0,
+        },
+    ],
     grainSizeMm: 0.2,
     grainLightnessAmplitude: 0.05,
     grainChromaAmplitude: 0.016,
@@ -56,11 +71,14 @@ const BG_STOPS: readonly GradientStop[] = [
 ];
 
 const buildFragmentShader = (
-    parameters: RadiolarianParameters,
+    parameters: RadiolarianSceneParameters,
     bgStops: readonly GradientStop[],
 ): string => {
     if (bgStops.length !== 4) {
         throw new Error("Expected exactly 4 background stops");
+    }
+    if (parameters.shapes.length === 0) {
+        throw new Error("Expected at least one radiolarian shape");
     }
 
     const oklabBgStops: OklabGradientStop[] = bgStops.map((stop) => ({
@@ -91,17 +109,18 @@ struct GlobalUniforms {
 };
 
 const MAX_NEIGHBORS: u32 = ${parameters.maxNeighbors}u;
-const POINT_COUNT: u32 = ${parameters.pointCount}u;
-const CORRIDOR_SCALE: f32 = ${parameters.corridorScale};
-const SHELL_RADIUS: f32 = ${parameters.shellRadius};
-const SHELL_THICKNESS: f32 = ${parameters.shellThickness};
-const CORNER_SMOOTHNESS: f32 = ${parameters.cornerSmoothness};
-const CSG_SMOOTHNESS: f32 = ${parameters.csgSmoothness};
+const SHAPE_COUNT: u32 = ${parameters.shapes.length}u;
 const INVERSE_GRAIN_SIZE_MM: f32 = ${1.0 / parameters.grainSizeMm};
 const GRAIN_LIGHTNESS_AMPLITUDE: f32 = ${parameters.grainLightnessAmplitude};
 const GRAIN_CHROMA_AMPLITUDE: f32 = ${parameters.grainChromaAmplitude};
 const GRAIN_HUE_AMPLITUDE: f32 = ${parameters.grainHueAmplitude};
 const MIN_CHROMA_FOR_HUE_JITTER: f32 = ${parameters.minChromaForHueJitter};
+
+struct ShapeData {
+    center_and_radius: vec4f,
+    shell_params: vec4f,
+    site_range: vec4u,
+};
 
 struct SiteData {
     site: vec4f,
@@ -112,7 +131,8 @@ struct SiteData {
 };
 
 @group(0) @binding(0) var<uniform> global_uniforms: GlobalUniforms;
-@group(1) @binding(0) var<storage, read> sites: array<SiteData>;
+@group(1) @binding(0) var<storage, read> shapes: array<ShapeData, SHAPE_COUNT>;
+@group(1) @binding(1) var<storage, read> sites: array<SiteData>;
 
 fn smax(a: f32, b: f32, k_in: f32) -> f32 {
     let k = k_in * 6.0;
@@ -120,19 +140,24 @@ fn smax(a: f32, b: f32, k_in: f32) -> f32 {
     return max(a, b) + h * h * h * k * (1.0 / 6.0);
 }
 
-fn scene_sdf(p: vec3f) -> f32 {
-    // 1) Base shell band around SHELL_RADIUS with thickness SHELL_THICKNESS.
-    let radius = length(p);
-    let d_shell = abs(radius - SHELL_RADIUS) - 0.5 * SHELL_THICKNESS;
+fn shape_sdf(p: vec3f, shape: ShapeData) -> f32 {
+    let local_p = p - shape.center_and_radius.xyz;
+    let shell_radius = shape.center_and_radius.w;
+    let shell_thickness = shape.shell_params.x;
+    let corridor_scale = shape.shell_params.y;
+    let corner_smoothness = shape.shell_params.z;
+    let csg_smoothness = shape.shell_params.w;
+    let radius = length(local_p);
+    let d_shell = abs(radius - shell_radius) - 0.5 * shell_thickness;
 
-    let point_count = POINT_COUNT;
+    let point_count = shape.site_range.y;
     if (point_count == 0u) {
         return d_shell;
     }
 
     // Normalize p to a unit direction for spherical ownership and boundary tests.
     let safe_radius = max(radius, 1e-6);
-    let direction = p / safe_radius;
+    let direction = local_p / safe_radius;
 
     // 2) Owning-site selection.
     //    Search a corridor in index space, then pick owner_index by maximum alignment
@@ -140,18 +165,20 @@ fn scene_sdf(p: vec3f) -> f32 {
     let point_count_f = f32(point_count);
     let approximate_index = ((1.0 - direction.y) * point_count_f * 0.5) - 0.5;
     let center_index = i32(round(approximate_index));
-    let corridor_half_width = i32(ceil(CORRIDOR_SCALE * sqrt(point_count_f)));
+    let corridor_half_width = i32(ceil(corridor_scale * sqrt(point_count_f)));
 
     let index_min = u32(max(center_index - corridor_half_width, 0));
     let index_max = u32(min(center_index + corridor_half_width, i32(point_count) - 1));
+    let site_offset = shape.site_range.x;
 
-    var owner_index = index_min;
+    var owner_index = site_offset + index_min;
     var best_alignment = -2.0;
-    for (var i = index_min; i <= index_max; i++) {
-        let alignment = dot(direction, sites[i].site.xyz);
+    for (var relative_index = index_min; relative_index <= index_max; relative_index++) {
+        let site_index = site_offset + relative_index;
+        let alignment = dot(direction, sites[site_index].site.xyz);
         if (alignment > best_alignment) {
             best_alignment = alignment;
-            owner_index = i;
+            owner_index = site_index;
         }
     }
 
@@ -190,15 +217,15 @@ fn scene_sdf(p: vec3f) -> f32 {
             let c_contracted = constraint.z;
             let inverse_length = constraint.w;
             let signed_halfplane = (a * tangent_x + b * tangent_y - c_contracted) * inverse_length;
-            d_poly = smax(d_poly, signed_halfplane, CORNER_SMOOTHNESS);
+            d_poly = smax(d_poly, signed_halfplane, corner_smoothness);
         }
     }
 
     // 5) Radial slab for through-cut extrusion.
-    //    d_slab < 0 means radius lies within [SHELL_RADIUS - SHELL_THICKNESS,
-    //    SHELL_RADIUS + SHELL_THICKNESS].
-    let slab_inner = SHELL_RADIUS - SHELL_THICKNESS;
-    let slab_outer = SHELL_RADIUS + SHELL_THICKNESS;
+    //    d_slab < 0 means radius lies within [shell_radius - shell_thickness,
+    //    shell_radius + shell_thickness].
+    let slab_inner = shell_radius - shell_thickness;
+    let slab_outer = shell_radius + shell_thickness;
     let d_slab = max(slab_inner - radius, radius - slab_outer);
 
     // 6) Hole construction and subtraction.
@@ -207,7 +234,15 @@ fn scene_sdf(p: vec3f) -> f32 {
     //    For SDF CSG, intersection uses max(), so d_hole = max(d_poly, d_slab).
     //    Final model subtracts this hole from d_shell via smooth CSG difference.
     let d_hole = max(d_poly, d_slab);
-    return smax(d_shell, -d_hole, CSG_SMOOTHNESS);
+    return smax(d_shell, -d_hole, csg_smoothness);
+}
+
+fn scene_sdf(p: vec3f) -> f32 {
+    var scene_distance = 1e9;
+    for (var shape_index: u32 = 0u; shape_index < SHAPE_COUNT; shape_index++) {
+        scene_distance = min(scene_distance, shape_sdf(p, shapes[shape_index]));
+    }
+    return scene_distance;
 }
 
 // Cf. https://iquilezles.org/articles/normalsSDF/
@@ -499,7 +534,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     let light_dir = normalize(vec3f(0.5, 1.0, 2.0));
 
     // Camera setup.
-    let cam_pos = vec3f(0.0, 0.0, 3.8);
+    let cam_pos = vec3f(0.1, -0.15, 1.8);
     let cam_target = vec3f(0.0, 0.0, 0.0);
     let cam_up = vec3f(0.0, 1.0, 0.0);
 
@@ -508,7 +543,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     let cam_right = normalize(cross(cam_forward, cam_up));
     let cam_true_up = cross(cam_right, cam_forward);
 
-    let fov = radians(40.0);
+    let fov = radians(55.0);
     let fov_scale = tan(0.5 * fov);
     let ray_dir = normalize(
         cam_right * uv.x * global_uniforms.aspect * fov_scale +
@@ -527,7 +562,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     var luminance = 0.0;
     var direction = vec2f(0.0, 0.0);
     var depth = -1.0;
-    var color = vec3f(0.99, 0.97, 0.86); // color if the ray hits the SDF surface
+    var color = vec3f(1.0, 1.0, 1.0);
 
     for (var step = 0; step < max_steps; step++) {
         let p = cam_pos + ray_dir * t;
@@ -567,16 +602,21 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
         t += step_scale * d;
     }
 
-    if (depth < 0.0) {
-        let bg_oklab = sample_background_gradient_oklab(in.uv.y);
-        let pixel_coord = in.uv * vec2f(
-            global_uniforms.aspect * global_uniforms.viewport_height_px,
-            global_uniforms.viewport_height_px
-        );
-        let mm_per_pixel = 1.0 / global_uniforms.pixels_per_mm;
-        let grain_coord = pixel_coord * mm_per_pixel * INVERSE_GRAIN_SIZE_MM;
-        let bg_with_grain = grain_lch(bg_oklab, grain_coord, global_uniforms.seed);
-        color = linear_to_srgb(oklab_to_linear_rgb(bg_with_grain));
+    let border = 0.11;
+    if (all(in.uv > vec2f(border, border * global_uniforms.aspect)) && all(in.uv <= vec2f(1.0 - border, 1.0 - border * global_uniforms.aspect))) {
+        if (depth < 0.0) {
+            let bg_oklab = sample_background_gradient_oklab((in.uv.y - border) / (1.0 - 2.0 * border));
+            let pixel_coord = in.uv * vec2f(
+                global_uniforms.aspect * global_uniforms.viewport_height_px,
+                global_uniforms.viewport_height_px
+            );
+            let mm_per_pixel = 1.0 / global_uniforms.pixels_per_mm;
+            let grain_coord = pixel_coord * mm_per_pixel * INVERSE_GRAIN_SIZE_MM;
+            let bg_with_grain = grain_lch(bg_oklab, grain_coord, global_uniforms.seed);
+            color = linear_to_srgb(oklab_to_linear_rgb(bg_with_grain));
+        } else {
+            color = vec3f(0.99, 0.97, 0.86);
+        }
     }
 
     return FragmentOut(
@@ -591,23 +631,31 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
  * CPU-side data payload for the radiolarian scene.
  */
 type RadiolarianCpuData = {
+    shapeData: Uint32Array<ArrayBuffer>;
     siteData: Float32Array<ArrayBuffer>;
 };
 
 class RadiolarianGpuResources implements LdzSceneGpuResources {
     readonly bindGroupEntries: readonly GPUBindGroupEntry[];
+    readonly #shapeBuffer: GPUBuffer;
     readonly #siteBuffer: GPUBuffer;
 
     /**
      * Creates scene GPU resources.
      *
+     * @param shapeBuffer - Storage buffer with per-shape SDF parameters.
      * @param siteBuffer - Storage buffer with site and neighbor constraint data.
      */
-    constructor(siteBuffer: GPUBuffer) {
+    constructor(shapeBuffer: GPUBuffer, siteBuffer: GPUBuffer) {
+        this.#shapeBuffer = shapeBuffer;
         this.#siteBuffer = siteBuffer;
         this.bindGroupEntries = [
             {
                 binding: 0,
+                resource: { buffer: this.#shapeBuffer },
+            },
+            {
+                binding: 1,
                 resource: { buffer: this.#siteBuffer },
             },
         ];
@@ -617,6 +665,7 @@ class RadiolarianGpuResources implements LdzSceneGpuResources {
      * Releases GPU resources.
      */
     destroy(): void {
+        this.#shapeBuffer.destroy();
         this.#siteBuffer.destroy();
     }
 }
@@ -629,6 +678,9 @@ export class RadiolarianLdzSceneModule implements LdzSceneModule<RadiolarianCpuD
         RADIOLARIAN_PARAMS,
         BG_STOPS,
     );
+    private static readonly FLOATS_PER_VEC4 = 4;
+    private static readonly STATIC_SITE_VEC4_COUNT = 4;
+    private static readonly WORDS_PER_SHAPE = 12;
 
     readonly id = "radiolarian";
     readonly fragmentShader = RadiolarianLdzSceneModule.FRAGMENT_SHADER;
@@ -640,6 +692,13 @@ export class RadiolarianLdzSceneModule implements LdzSceneModule<RadiolarianCpuD
     readonly bindGroupLayoutEntries: readonly GPUBindGroupLayoutEntry[] = [
         {
             binding: 0,
+            visibility: GPUShaderStage.FRAGMENT,
+            buffer: {
+                type: "read-only-storage",
+            },
+        },
+        {
+            binding: 1,
             visibility: GPUShaderStage.FRAGMENT,
             buffer: {
                 type: "read-only-storage",
@@ -730,20 +789,22 @@ export class RadiolarianLdzSceneModule implements LdzSceneModule<RadiolarianCpuD
     }
 
     /**
-     * Generates site positions and precomputed neighbor constraints.
+     * Generates packed site data for one radiolarian shell.
      *
+     * @param shape - Per-shape parameters.
+     * @param maxNeighbors - Maximum packed neighbor constraints.
      * @param seed - Shared deterministic seed.
-     * @param dimensions - Current render dimensions.
      * @returns Packed per-site GPU data.
      */
-    createCpuData(seed: number, dimensions: AppDimensions): RadiolarianCpuData {
-        void dimensions;
-        const pointCount = RADIOLARIAN_PARAMS.pointCount;
-        const maxNeighbors = RADIOLARIAN_PARAMS.maxNeighbors;
+    private static createShapeSiteData(
+        shape: RadiolarianShapeParameters,
+        maxNeighbors: number,
+        seed: number,
+    ): Float32Array<ArrayBuffer> {
+        const pointCount = shape.pointCount;
         const goldenAngle = Math.PI * (3.0 - Math.sqrt(5.0));
-        const rng = prng_xor4096(seed);
-        const jitterAmplitude =
-            RADIOLARIAN_PARAMS.jitterStrength / Math.sqrt(Math.max(pointCount, 1));
+        const rng = prng_xor4096((seed + shape.seedOffset) >>> 0);
+        const jitterAmplitude = shape.jitterStrength / Math.sqrt(Math.max(pointCount, 1));
 
         const sites: Vec3[] = [];
         for (let index = 0; index < pointCount; index++) {
@@ -780,8 +841,8 @@ export class RadiolarianLdzSceneModule implements LdzSceneModule<RadiolarianCpuD
         const knnNeighbors = RadiolarianLdzSceneModule.buildKnnNeighbors(sites, maxNeighbors);
         const knnSets = knnNeighbors.map((neighbors) => new Set<number>(neighbors));
 
-        const floatsPerVec4 = 4;
-        const staticVec4Count = 4;
+        const floatsPerVec4 = RadiolarianLdzSceneModule.FLOATS_PER_VEC4;
+        const staticVec4Count = RadiolarianLdzSceneModule.STATIC_SITE_VEC4_COUNT;
         const constraintsVec4Offset = staticVec4Count;
         const vec4PerSite = staticVec4Count + maxNeighbors;
         const floatsPerSite = vec4PerSite * floatsPerVec4;
@@ -838,8 +899,7 @@ export class RadiolarianLdzSceneModule implements LdzSceneModule<RadiolarianCpuD
                 const c = 1.0 - RadiolarianLdzSceneModule.dot(site, neighborSite);
                 const length = Math.hypot(a, b);
                 const safeInverseLength = length > 1e-6 ? 1.0 / length : 0.0;
-                const cContracted =
-                    c - RADIOLARIAN_PARAMS.contractionMargin * Math.max(length, 1e-6);
+                const cContracted = c - shape.contractionMargin * Math.max(length, 1e-6);
 
                 const constraintBase = constraintsOffset + constraintIndex * floatsPerVec4;
                 siteData[constraintBase] = a;
@@ -849,7 +909,67 @@ export class RadiolarianLdzSceneModule implements LdzSceneModule<RadiolarianCpuD
             }
         }
 
+        return siteData;
+    }
+
+    /**
+     * Generates site positions and precomputed neighbor constraints.
+     *
+     * @param seed - Shared deterministic seed.
+     * @param dimensions - Current render dimensions.
+     * @returns Packed per-site GPU data.
+     */
+    createCpuData(seed: number, dimensions: AppDimensions): RadiolarianCpuData {
+        void dimensions;
+        const maxNeighbors = RADIOLARIAN_PARAMS.maxNeighbors;
+        const shapeCount = RADIOLARIAN_PARAMS.shapes.length;
+        const wordsPerShape = RadiolarianLdzSceneModule.WORDS_PER_SHAPE;
+        const shapeBuffer = new ArrayBuffer(
+            shapeCount * wordsPerShape * Uint32Array.BYTES_PER_ELEMENT,
+        );
+        const shapeData: Uint32Array<ArrayBuffer> = new Uint32Array(shapeBuffer);
+        const shapeDataFloatView = new Float32Array(shapeBuffer);
+
+        const perShapeSiteData = RADIOLARIAN_PARAMS.shapes.map((shape) =>
+            RadiolarianLdzSceneModule.createShapeSiteData(shape, maxNeighbors, seed),
+        );
+        const floatsPerSite =
+            (RadiolarianLdzSceneModule.STATIC_SITE_VEC4_COUNT + maxNeighbors) *
+            RadiolarianLdzSceneModule.FLOATS_PER_VEC4;
+        const totalSiteCount = RADIOLARIAN_PARAMS.shapes.reduce(
+            (sum, shape) => sum + shape.pointCount,
+            0,
+        );
+        const siteData: Float32Array<ArrayBuffer> = new Float32Array(
+            totalSiteCount * floatsPerSite,
+        );
+
+        let siteOffset = 0;
+        for (let shapeIndex = 0; shapeIndex < shapeCount; shapeIndex++) {
+            const shape = RADIOLARIAN_PARAMS.shapes[shapeIndex];
+            const shapeBase = shapeIndex * wordsPerShape;
+
+            shapeDataFloatView[shapeBase] = shape.center[0];
+            shapeDataFloatView[shapeBase + 1] = shape.center[1];
+            shapeDataFloatView[shapeBase + 2] = shape.center[2];
+            shapeDataFloatView[shapeBase + 3] = shape.shellRadius;
+
+            shapeDataFloatView[shapeBase + 4] = shape.shellThickness;
+            shapeDataFloatView[shapeBase + 5] = shape.corridorScale;
+            shapeDataFloatView[shapeBase + 6] = shape.cornerSmoothness;
+            shapeDataFloatView[shapeBase + 7] = shape.csgSmoothness;
+
+            shapeData[shapeBase + 8] = siteOffset;
+            shapeData[shapeBase + 9] = shape.pointCount;
+            shapeData[shapeBase + 10] = 0;
+            shapeData[shapeBase + 11] = 0;
+
+            siteData.set(perShapeSiteData[shapeIndex], siteOffset * floatsPerSite);
+            siteOffset += shape.pointCount;
+        }
+
         return {
+            shapeData,
             siteData,
         };
     }
@@ -867,12 +987,17 @@ export class RadiolarianLdzSceneModule implements LdzSceneModule<RadiolarianCpuD
         queue: GPUQueue,
         cpuData: RadiolarianCpuData,
     ): LdzSceneGpuResources {
+        const shapeBuffer = device.createBuffer({
+            size: cpuData.shapeData.byteLength,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        });
         const siteBuffer = device.createBuffer({
             size: cpuData.siteData.byteLength,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         });
+        queue.writeBuffer(shapeBuffer, 0, cpuData.shapeData);
         queue.writeBuffer(siteBuffer, 0, cpuData.siteData);
 
-        return new RadiolarianGpuResources(siteBuffer);
+        return new RadiolarianGpuResources(shapeBuffer, siteBuffer);
     }
 }
