@@ -55,6 +55,18 @@ const RADIOLARIAN_PARAMS: RadiolarianSceneParameters = {
             csgSmoothness: 0.05 / 6.0,
             seedOffset: 0,
         },
+        {
+            center: [0.75, 0.75, 0.75],
+            pointCount: 80,
+            jitterStrength: 0.6,
+            contractionMargin: 0.02,
+            corridorScale: 1.5,
+            shellRadius: 0.5,
+            shellThickness: 0.05,
+            cornerSmoothness: 0.13 / 6.0,
+            csgSmoothness: 0.05 / 6.0,
+            seedOffset: 1000,
+        },
     ],
     grainSizeMm: 0.2,
     grainLightnessAmplitude: 0.05,
@@ -534,8 +546,8 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     let light_dir = normalize(vec3f(0.5, 1.0, 2.0));
 
     // Camera setup.
-    let cam_pos = vec3f(0.1, -0.15, 1.8);
-    let cam_target = vec3f(0.0, 0.0, 0.0);
+    let cam_pos = vec3f(0.0, 0.0, 3.5);
+    let cam_target = vec3f(0.3, 0.0, 0.0);
     let cam_up = vec3f(0.0, 1.0, 0.0);
 
     // Camera basis.
@@ -543,7 +555,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     let cam_right = normalize(cross(cam_forward, cam_up));
     let cam_true_up = cross(cam_right, cam_forward);
 
-    let fov = radians(55.0);
+    let fov = radians(40.0);
     let fov_scale = tan(0.5 * fov);
     let ray_dir = normalize(
         cam_right * uv.x * global_uniforms.aspect * fov_scale +
