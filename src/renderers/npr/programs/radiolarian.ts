@@ -1,5 +1,6 @@
 import { outlinesFromLDZ } from "../../../npr/outlines";
 import { drawPolyline } from "../../../npr/polyline";
+import { createDerivedSeededRandom, createSeededRandom } from "../../../npr/rand";
 import { flowFieldStreamlines } from "../../../npr/streamlines";
 import type { NprProgramModule, NprProgramRenderContext } from "../npr-program-module";
 
@@ -51,14 +52,20 @@ export class RadiolarianNprProgramModule implements NprProgramModule {
             maxAreaDeviation: 0.25,
         };
 
-        const streamlines = flowFieldStreamlines(ldzData, width, height, seed, config);
+        const streamlines = flowFieldStreamlines(
+            ldzData,
+            width,
+            height,
+            createSeededRandom(seed),
+            config,
+        );
         config.orientationOffset = (Math.PI / 180.0) * 30.0;
         config.maxHatchedLuminance = 0.25;
         const crosslines = flowFieldStreamlines(
             ldzData,
             width,
             height,
-            `${seed}cross`,
+            createDerivedSeededRandom(seed, "cross"),
             config,
         );
         const outlines = outlinesFromLDZ(ldzData, width, height, {

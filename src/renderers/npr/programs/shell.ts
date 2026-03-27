@@ -1,3 +1,4 @@
+import { createSeededRandom } from "../../../npr/rand";
 import { poissonStipplesFromLDZ } from "../../../npr/stippling";
 import type { NprProgramModule, NprProgramRenderContext } from "../npr-program-module";
 
@@ -36,13 +37,19 @@ export class ShellNprProgramModule implements NprProgramModule {
         const cellSize = rMax;
         const maxAttempts = 30;
 
-        const stipples = poissonStipplesFromLDZ(ldzData, width, height, seed, {
-            rMin,
-            rMax,
-            gamma,
-            cellSize,
-            maxAttempts,
-        });
+        const stipples = poissonStipplesFromLDZ(
+            ldzData,
+            width,
+            height,
+            createSeededRandom(seed),
+            {
+                rMin,
+                rMax,
+                gamma,
+                cellSize,
+                maxAttempts,
+            },
+        );
 
         ctx2d.save();
         ctx2d.fillStyle = "#fff";

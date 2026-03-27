@@ -11,7 +11,7 @@ src/
 	main.ts                         selects the active scene/program pair and runtime constants
 	app-runtime.ts                  bootstraps DOM, state, renderer wiring, and the initial render
 	state-manager.ts                generic keyed state container with async subscriptions
-	npr/                            reusable CPU-side NPR algorithms and color utilities
+	npr/                            reusable CPU-side NPR algorithms, rng/seed helpers, and color utilities
 	renderers/
 		frame-renderer.ts             shared FrameData contract between GPU and NPR stages
 		webgpu-renderer.ts            tiled WebGPU orchestration and debug-canvas integration
@@ -26,8 +26,6 @@ src/
 			programs/                   program-specific 2D rendering from LDZ data
 	types/
 		app-state.ts                  shared application state and dimension types
-		xor4096.d.ts                  local typing for the seeded PRNG package
-	vendor/esm-seedrandom/          vendored PRNG implementation used via xor4096
 public/
 	index.html                      UI shell, control IDs, debugCanvas, and outputCanvas
 	style.css                       page styling
@@ -55,9 +53,9 @@ Use these entry points to avoid broad file reads:
 * Change NPR appearance on the 2D canvas: read `src/renderers/npr/npr-program-module.ts`, then the closest file in `src/renderers/npr/programs/`, then only the helper files it imports from `src/npr/`.
 * Change flow hatching: start with `src/npr/streamlines.ts`; current callers are the diatom and radiolarian NPR programs.
 * Change stippling: start with `src/npr/stippling.ts`; current callers are the crystal and shell NPR programs.
+* Change seed hashing, derived random streams, or SFC32-backed NPR randomness: start with `src/npr/rand.ts` and `src/npr/sfc32.ts`.
 * Change outline extraction or line cleanup: start with `src/npr/outlines.ts` and `src/npr/polyline.ts`.
 * Change color interpolation or gradient behavior: start with `src/npr/color.ts`; radiolarian background color is generated in `src/renderers/webgpu/scenes/radiolarian.ts`.
-* Change PRNG typing or vendor behavior: read `src/types/xor4096.d.ts` and `src/vendor/esm-seedrandom/`; most callers only need `prng_xor4096`.
 * Change tooling, build, or formatting behavior: read `package.json`, `biome.json`, `tsconfig.json`, and `scripts/`.
 
 Practical reading rules:
@@ -68,7 +66,6 @@ Practical reading rules:
 * When adding a new NPR program, read `src/renderers/npr/npr-program-module.ts` and one closest existing program, then only the algorithm helpers it calls.
 * Same-stem names (`crystal`, `diatom`, `radiolarian`, `shell`) indicate paired GPU and NPR modules. Read both only when a change crosses the GPU/CPU boundary.
 * Treat `public/js/main.js` as generated output.
-* Treat `src/vendor/esm-seedrandom/` as vendored code; avoid editing it unless the task is specifically about PRNG behavior or packaging.
 
 ### Keep this overview current
 

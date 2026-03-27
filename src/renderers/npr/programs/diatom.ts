@@ -1,7 +1,7 @@
-import { prng_xor4096 } from "xor4096";
 import { LinearGradient } from "../../../npr/color";
 import { outlinesFromLDZ } from "../../../npr/outlines";
 import { drawPolyline } from "../../../npr/polyline";
+import { createDerivedSeededRandom, createSeededRandom } from "../../../npr/rand";
 import { flowFieldStreamlines } from "../../../npr/streamlines";
 import type { NprProgramModule, NprProgramRenderContext } from "../npr-program-module";
 
@@ -48,14 +48,20 @@ export class DiatomNprProgramModule implements NprProgramModule {
             maxAreaDeviation: 0.25,
         };
 
-        const streamlines = flowFieldStreamlines(ldzData, width, height, seed, config);
+        const streamlines = flowFieldStreamlines(
+            ldzData,
+            width,
+            height,
+            createSeededRandom(seed),
+            config,
+        );
         config.orientationOffset = (Math.PI / 180.0) * 30.0;
         config.maxHatchedLuminance = 0.2475;
         const crosslines = flowFieldStreamlines(
             ldzData,
             width,
             height,
-            `${seed}cross`,
+            createDerivedSeededRandom(seed, "cross"),
             config,
         );
         const outlines = outlinesFromLDZ(ldzData, width, height, {
@@ -74,7 +80,7 @@ export class DiatomNprProgramModule implements NprProgramModule {
         const rFill = Math.round(0.99 * 255);
         const gFill = Math.round(0.95 * 255);
         const bFill = Math.round(0.85 * 255);
-        const rng = prng_xor4096(`${seed}dithering`);
+        const rng = createDerivedSeededRandom(seed, "dithering");
         const imgData = ctx2d.createImageData(width, height, { colorSpace: "srgb" });
         const data = imgData.data;
         const widthDenominator = Math.max(width - 1, 1);

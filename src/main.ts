@@ -8,7 +8,7 @@ const heightCm = 60;
 const dpi = 60;
 const maxDebugSize = 1024;
 const gpuSeed = 0;
-const nprSeed = "52769ff2367023";
+const nprSeed = "radiolarian-1";
 // =============================
 
 const ldzSceneModule = new RadiolarianLdzSceneModule();

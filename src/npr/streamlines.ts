@@ -1,7 +1,7 @@
-import { prng_xor4096 } from "xor4096";
 import { SpatialGrid } from "./grid";
 import { outlinesFromLDZ } from "./outlines";
 import { drawPolyline, visvalingamWhyatt } from "./polyline";
+import { createSeededRandom } from "./rand";
 
 /**
  * A 2D point.
@@ -250,7 +250,7 @@ function flowFieldStreamline(
  * @param ldzData - LDZ data.
  * @param width - Image width.
  * @param height - Image height.
- * @param rngSeed - RNG seed.
+ * @param rng - Random callback.
  * @param config - Streamline config.
  * @returns Streamlines.
  */
@@ -258,7 +258,7 @@ export function flowFieldStreamlines(
     ldzData: Float32Array,
     width: number,
     height: number,
-    rngSeed: string,
+    rng: () => number,
     config: StreamlineConfig,
 ): Point2[][] {
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
@@ -275,7 +275,6 @@ export function flowFieldStreamlines(
 
     const safeSeparation = Number.isFinite(dSepMax) && dSepMax > 0 ? dSepMax : 1.0;
 
-    const rng = prng_xor4096(rngSeed);
     const grid = new SpatialGrid(safeSeparation);
     const queue: Array<{ sid: number; line: Point2[] }> = [];
     const streamlines: Point2[][] = [];
@@ -399,7 +398,13 @@ export function renderFromLDZ(
         maxAreaDeviation: 0.25,
     };
 
-    const streamlines = flowFieldStreamlines(ldzData, width, height, seed, config);
+    const streamlines = flowFieldStreamlines(
+        ldzData,
+        width,
+        height,
+        createSeededRandom(seed),
+        config,
+    );
     const outlines = outlinesFromLDZ(ldzData, width, height, {
         maxAreaDeviation: config.maxAreaDeviation,
     });

@@ -1,5 +1,5 @@
-import { prng_xor4096 } from "xor4096";
 import { SpatialGrid } from "./grid";
+import { createSeededRandom } from "./rand";
 
 /**
  * A 2D point.
@@ -23,7 +23,7 @@ type StippleOptions = {
  * @param ldzData - LDZ data.
  * @param width - Image width.
  * @param height - Image height.
- * @param rngSeed - RNG seed.
+ * @param rng - Random callback.
  * @param options - Sampling options.
  * @returns Stipple points.
  */
@@ -31,7 +31,7 @@ export function poissonStipplesFromLDZ(
     ldzData: Float32Array,
     width: number,
     height: number,
-    rngSeed: string,
+    rng: () => number,
     {
         rMin = 1.1,
         rMax = 5.5,
@@ -69,8 +69,6 @@ export function poissonStipplesFromLDZ(
     function radius(luminance: number): number {
         return rMin + (rMax - rMin) * luminance ** gamma;
     }
-
-    const rng = prng_xor4096(rngSeed);
 
     const grid = new SpatialGrid(safeCellSize);
     const queue: Point2[] = [];
@@ -155,7 +153,7 @@ export function renderFromLDZ(
     const cellSize = rMax;
     const maxAttempts = 30;
 
-    const stipples = poissonStipplesFromLDZ(ldzData, width, height, seed, {
+    const stipples = poissonStipplesFromLDZ(ldzData, width, height, createSeededRandom(seed), {
         rMin,
         rMax,
         gamma,

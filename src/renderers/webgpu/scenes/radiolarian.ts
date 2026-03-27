@@ -1,4 +1,3 @@
-import { prng_xor4096 } from "xor4096";
 import {
     type Color3,
     type GradientStop,
@@ -6,6 +5,7 @@ import {
     type OklabGradientStop,
     srgbToLinear,
 } from "../../../npr/color";
+import { createSfc32 } from "../../../npr/sfc32";
 import type { AppDimensions } from "../../../types/app-state";
 import type { LdzSceneGpuResources, LdzSceneModule } from "../ldz-scene-module";
 
@@ -741,7 +741,7 @@ export class RadiolarianLdzSceneModule implements LdzSceneModule<RadiolarianCpuD
         const pointCount = RADIOLARIAN_PARAMS.pointCount;
         const maxNeighbors = RADIOLARIAN_PARAMS.maxNeighbors;
         const goldenAngle = Math.PI * (3.0 - Math.sqrt(5.0));
-        const rng = prng_xor4096(seed);
+        const rng = createSfc32(BigInt(seed >>> 0));
         const jitterAmplitude =
             RADIOLARIAN_PARAMS.jitterStrength / Math.sqrt(Math.max(pointCount, 1));
 
