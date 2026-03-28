@@ -30,7 +30,7 @@ public/
 	index.html                      UI shell, control IDs, debugCanvas, and outputCanvas
 	style.css                       page styling
 	js/main.js                      generated bundle; edit src/main.ts instead
-scripts/                          scripts for Git pre-commit hook
+scripts/                          scripts for Git pre-commit hook and the Node test runner for bundled `*.test.ts` files
 ```
 
 The runtime flow is:
@@ -56,7 +56,7 @@ Use these entry points to avoid broad file reads:
 * Change seed hashing, derived random streams, or SFC32-backed NPR randomness: start with `src/npr/rand.ts` and `src/npr/sfc32.ts`.
 * Change outline extraction or line cleanup: start with `src/npr/outlines.ts` and `src/npr/polyline.ts`.
 * Change color interpolation or gradient behavior: start with `src/npr/color.ts`; radiolarian background color is generated in `src/renderers/webgpu/scenes/radiolarian.ts`.
-* Change tooling, build, or formatting behavior: read `package.json`, `biome.json`, `tsconfig.json`, and `scripts/`.
+* Change tooling, build, test, or formatting behavior: read `package.json`, `biome.json`, `tsconfig.json`, and `scripts/`.
 
 Practical reading rules:
 
