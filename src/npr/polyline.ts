@@ -6,6 +6,31 @@ import { MinHeap } from "./heap";
 type Point2 = [number, number];
 
 /**
+ * Options for drawing a polyline as overlapping filled circles.
+ */
+export type PolylineCircleOptions = {
+    /**
+     * Base radius of each circle stamp.
+     */
+    radius?: number;
+
+    /**
+     * Fixed spacing between consecutive samples along polyline arclength.
+     */
+    spacing?: number;
+
+    /**
+     * Symmetric random radius variation added to the base radius.
+     */
+    radiusJitter?: number;
+
+    /**
+     * Symmetric random offset magnitude applied along the segment normal.
+     */
+    normalOffsetJitter?: number;
+};
+
+/**
  * Draws a polyline.
  *
  * @param ctx2d - 2D rendering context.
@@ -25,6 +50,88 @@ export function drawPolyline(
         ctx2d.lineTo(points[i][0] + xOffset, points[i][1] + yOffset);
     }
     ctx2d.stroke();
+}
+
+/**
+ * Draws a polyline by stamping overlapping filled circles along its arclength.
+ *
+ * @param ctx2d - 2D rendering context.
+ * @param points - Polyline points.
+ * @param rand - Random callback that returns values in [0, 1).
+ * @param options - Circle sampling and jitter options.
+ * @param offset - Coordinate offset.
+ */
+export function drawPolylineWithCircles(
+    ctx2d: CanvasRenderingContext2D,
+    points: Point2[],
+    rand: () => number,
+    options: PolylineCircleOptions = {},
+    offset: Point2 = [0.0, 0.0],
+): void {
+    if (points.length === 0) return;
+
+    const [xOffset, yOffset] = offset;
+    const baseRadius = Math.max(0.0, options.radius ?? 1.0);
+    if (baseRadius <= 0.0) return;
+
+    const spacing = Math.max(1e-6, options.spacing ?? baseRadius);
+    const radiusJitter = Math.max(0.0, options.radiusJitter ?? 0.0);
+    const normalOffsetJitter = Math.max(0.0, options.normalOffsetJitter ?? 0.0);
+
+    const randomSigned = (): number => 2.0 * rand() - 1.0;
+
+    let firstNormal: Point2 = [0.0, 0.0];
+    for (let i = 0; i < points.length - 1; i++) {
+        const dx = points[i + 1][0] - points[i][0];
+        const dy = points[i + 1][1] - points[i][1];
+        const length = Math.hypot(dx, dy);
+        if (length > 1e-9) {
+            const inverseLength = 1.0 / length;
+            firstNormal = [-dy * inverseLength, dx * inverseLength];
+            break;
+        }
+    }
+
+    const addCircleStamp = (center: Point2, normal: Point2): void => {
+        const radius = Math.max(0.01, baseRadius + randomSigned() * radiusJitter);
+        const normalOffset = randomSigned() * normalOffsetJitter;
+        const centerX = center[0] + xOffset + normal[0] * normalOffset;
+        const centerY = center[1] + yOffset + normal[1] * normalOffset;
+        ctx2d.moveTo(centerX + radius, centerY);
+        ctx2d.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+    };
+
+    ctx2d.beginPath();
+    addCircleStamp(points[0], firstNormal);
+
+    let nextSampleDistance = spacing;
+    let polylineDistance = 0.0;
+
+    for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[i];
+        const p1 = points[i + 1];
+        const dx = p1[0] - p0[0];
+        const dy = p1[1] - p0[1];
+        const segmentLength = Math.hypot(dx, dy);
+        if (segmentLength <= 1e-9) {
+            continue;
+        }
+        const inverseSegmentLength = 1.0 / segmentLength;
+
+        const segmentStartDistance = polylineDistance;
+        const segmentEndDistance = segmentStartDistance + segmentLength;
+        const normal: Point2 = [-dy * inverseSegmentLength, dx * inverseSegmentLength];
+
+        while (nextSampleDistance <= segmentEndDistance) {
+            const t = (nextSampleDistance - segmentStartDistance) * inverseSegmentLength;
+            addCircleStamp([p0[0] + dx * t, p0[1] + dy * t], normal);
+            nextSampleDistance += spacing;
+        }
+
+        polylineDistance = segmentEndDistance;
+    }
+
+    ctx2d.fill();
 }
 
 /**

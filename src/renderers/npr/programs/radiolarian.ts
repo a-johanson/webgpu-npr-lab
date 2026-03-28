@@ -1,5 +1,5 @@
 import { outlinesFromLDZ } from "../../../npr/outlines";
-import { drawPolyline } from "../../../npr/polyline";
+import { drawPolylineWithCircles } from "../../../npr/polyline";
 import { createDerivedSeededRandom, createSeededRandom } from "../../../npr/rand";
 import { flowFieldStreamlines } from "../../../npr/streamlines";
 import type { NprProgramModule, NprProgramRenderContext } from "../npr-program-module";
@@ -73,23 +73,34 @@ export class RadiolarianNprProgramModule implements NprProgramModule {
         });
 
         ctx2d.strokeStyle = "#000";
+        ctx2d.fillStyle = "#000";
         ctx2d.lineWidth = 0.22 * pixelsPerMm;
         ctx2d.lineCap = "round";
         ctx2d.lineJoin = "round";
+
+        const circleRadius = 0.75 * ctx2d.lineWidth;
+        const circleOptions = {
+            radius: circleRadius,
+            spacing: 0.7 * ctx2d.lineWidth,
+            radiusJitter: 0.45 * ctx2d.lineWidth,
+            normalOffsetJitter: 0.35 * ctx2d.lineWidth,
+        };
 
         const imgData = ctx2d.createImageData(width, height, { colorSpace: "srgb" });
         const data = imgData.data;
         data.set(colorData);
         ctx2d.putImageData(imgData, 0, 0);
 
+        const inkRandom = createDerivedSeededRandom(seed, "ink");
+
         for (const line of crosslines) {
-            drawPolyline(ctx2d, line);
+            drawPolylineWithCircles(ctx2d, line, inkRandom, circleOptions);
         }
         for (const line of streamlines) {
-            drawPolyline(ctx2d, line);
+            drawPolylineWithCircles(ctx2d, line, inkRandom, circleOptions);
         }
         for (const line of outlines) {
-            drawPolyline(ctx2d, line, [0.5, 0.5]);
+            drawPolylineWithCircles(ctx2d, line, inkRandom, circleOptions, [0.5, 0.5]);
         }
     }
 }
