@@ -1,5 +1,3 @@
-const UINT32_SCALE = 0x1_0000_0000;
-
 /**
  * Raw SFC32 state.
  */
@@ -103,7 +101,7 @@ export class Sfc32 {
      * @returns Next floating-point output.
      */
     nextFloat(): number {
-        return this.nextUint32() / UINT32_SCALE;
+        return this.nextUint32() / 0x1_0000_0000;
     }
 }
 
