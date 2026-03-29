@@ -10,6 +10,8 @@ import type { NprProgramModule, NprProgramRenderContext } from "../npr-program-m
 export class RadiolarianNprProgramModule implements NprProgramModule {
     readonly id = "radiolarian";
 
+    public static readonly WIDTH_CM = 50;
+    public static readonly HEIGHT_CM = 60;
     public static readonly NPR_SEED = "radiolarian-1";
 
     /**
