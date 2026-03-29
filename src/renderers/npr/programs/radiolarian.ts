@@ -10,6 +10,8 @@ import type { NprProgramModule, NprProgramRenderContext } from "../npr-program-m
 export class RadiolarianNprProgramModule implements NprProgramModule {
     readonly id = "radiolarian";
 
+    public static readonly NPR_SEED = "radiolarian-1";
+
     /**
      * Renders the radiolarian NPR program from LDZ data.
      *

@@ -499,7 +499,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     let light_dir = normalize(vec3f(0.5, 1.0, 2.0));
 
     // Camera setup.
-    let cam_pos = vec3f(0.0, 0.0, 3.8);
+    let cam_pos = vec3f(0.5, 0.15, 3.8);
     let cam_target = vec3f(0.0, 0.0, 0.0);
     let cam_up = vec3f(0.0, 1.0, 0.0);
 
@@ -625,6 +625,8 @@ class RadiolarianGpuResources implements LdzSceneGpuResources {
  * LDZ scene module for a radiolarian-like shell with contracted cell holes.
  */
 export class RadiolarianLdzSceneModule implements LdzSceneModule<RadiolarianCpuData> {
+    public static readonly GPU_SEED = 0;
+
     private static readonly FRAGMENT_SHADER = buildFragmentShader(
         RADIOLARIAN_PARAMS,
         BG_STOPS,
