@@ -38,8 +38,8 @@ export class RadiolarianNprProgramModule implements NprProgramModule {
         const pixelsPerMm = dpi / 25.4;
 
         const config = {
-            dSepMax: 1.7 * pixelsPerMm,
-            dSepShadowFactor: 0.3,
+            dSepMax: 2.0 * pixelsPerMm,
+            dSepShadowFactor: 0.4,
             gammaLuminance: 2.0,
             dTestFactor: 0.9,
             dStep: 0.3 * pixelsPerMm,
@@ -78,12 +78,12 @@ export class RadiolarianNprProgramModule implements NprProgramModule {
         ctx2d.lineCap = "round";
         ctx2d.lineJoin = "round";
 
-        const circleRadius = 0.75 * ctx2d.lineWidth;
+        const circleRadius = 0.8 * ctx2d.lineWidth;
         const circleOptions = {
             radius: circleRadius,
-            spacing: 0.7 * ctx2d.lineWidth,
-            radiusJitter: 0.45 * ctx2d.lineWidth,
-            normalOffsetJitter: 0.35 * ctx2d.lineWidth,
+            spacing: 0.6 * ctx2d.lineWidth,
+            radiusJitter: 0.4 * ctx2d.lineWidth,
+            normalOffsetJitter: 0.3 * ctx2d.lineWidth,
         };
 
         const imgData = ctx2d.createImageData(width, height, { colorSpace: "srgb" });
