@@ -3,6 +3,7 @@ import {
     type GradientStop,
     linearToOklab,
     type OklabGradientStop,
+    oklchToOklab,
     srgbToLinear,
 } from "../../../npr/color";
 import { createSfc32 } from "../../../npr/sfc32";
@@ -39,7 +40,7 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     corridorScale: 1.5,
     shellRadius: 1.0,
     shellThickness: 0.05,
-    cornerSmoothness: 0.13 / 6.0,
+    cornerSmoothness: 0.12 / 6.0,
     csgSmoothness: 0.05 / 6.0,
     grainSizeMm: 0.2,
     grainLightnessAmplitude: 0.05,
@@ -55,6 +56,9 @@ const BG_STOPS: readonly GradientStop[] = [
     { position: 0.6, srgb: [0.921, 0.67, 0.582] },
 ];
 
+const SHELL_INNER_OKLCH: Color3 = [0.98, 0.13, 2.5];
+const SHELL_OUTER_OKLCH: Color3 = [0.99, 0.01, 2.5];
+
 const buildFragmentShader = (
     parameters: RadiolarianParameters,
     bgStops: readonly GradientStop[],
@@ -67,6 +71,8 @@ const buildFragmentShader = (
         position: stop.position,
         oklab: linearToOklab(srgbToLinear(stop.srgb)),
     }));
+    const shellInnerOkLab = oklchToOklab(SHELL_INNER_OKLCH);
+    const shellOuterOkLab = oklchToOklab(SHELL_OUTER_OKLCH);
     const floatLiteral = (v: number): string => v.toPrecision(8);
     const vec3Literal = (v: Color3): string =>
         `vec3f(${floatLiteral(v[0])}, ${floatLiteral(v[1])}, ${floatLiteral(v[2])})`;
@@ -316,6 +322,17 @@ fn oklch_to_oklab(lch: vec3f) -> vec3f {
     return vec3f(lightness, chroma * cos(hue), chroma * sin(hue));
 }
 
+fn sample_shell_color_srgb(p: vec3f, normal: vec3f) -> vec3f {
+    let inner = ${vec3Literal(shellInnerOkLab)};
+    let outer = ${vec3Literal(shellOuterOkLab)};
+
+    let r = length(p);
+    let direction = p / max(r, 1.0e-6);
+    let t = abs(dot(direction, normal));
+    let color_oklab = mix(inner, outer, t);
+    return linear_to_srgb(oklab_to_linear_rgb(color_oklab));
+}
+
 fn sample_background_gradient_oklab(t: f32) -> vec3f {
     let stop0 = ${floatLiteral(oklabBgStops[0].position)};
     let stop1 = ${floatLiteral(oklabBgStops[1].position)};
@@ -527,7 +544,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     var luminance = 0.0;
     var direction = vec2f(0.0, 0.0);
     var depth = -1.0;
-    var color = vec3f(0.99, 0.97, 0.86); // color if the ray hits the SDF surface
+    var color = vec3f(0.0);
 
     for (var step = 0; step < max_steps; step++) {
         let p = cam_pos + ray_dir * t;
@@ -536,6 +553,8 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
         if (d < epsilon) {
             let normal = calc_normal(p);
             let p_relative = p - cam_pos;
+
+            color = sample_shell_color_srgb(p, normal);
 
             // Simple lighting (luminance).
             let normal_amount = dot(normal, light_dir);
