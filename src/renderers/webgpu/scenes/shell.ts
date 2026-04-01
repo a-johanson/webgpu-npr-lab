@@ -7,6 +7,11 @@ struct VertexOut {
     @location(0) uv: vec2f,
 };
 
+struct FragmentOut {
+    @location(0) ldz: vec4f,
+    @location(1) color: vec4f,
+};
+
 struct GlobalUniforms {
     aspect: f32,
     seed: u32,
@@ -31,6 +36,9 @@ struct Point {
 @group(0) @binding(0) var<uniform> global_uniforms: GlobalUniforms;
 @group(1) @binding(0) var<storage, read> points: array<Point>;
 @group(1) @binding(1) var<uniform> scene_meta: SceneMeta;
+
+const SHELL_BASE_COLOR: vec3f = vec3f(1.0, 1.0, 1.0);
+const BACKGROUND_COLOR: vec3f = vec3f(0.9647059, 0.8784314, 0.28627452);
 
 fn sd_sphere(p: vec3f, r: f32) -> f32 {
     return length(p) - r;
@@ -157,7 +165,7 @@ fn calc_fresnel(view_direction: vec3f, normal: vec3f) -> f32 {
 }
 
 @fragment
-fn main_fragment(in: VertexOut) -> @location(0) vec4f {
+fn main_fragment(in: VertexOut) -> FragmentOut {
     // Ray setup.
     let uv = in.uv * 2.0 - 1.0;
 
@@ -193,6 +201,7 @@ fn main_fragment(in: VertexOut) -> @location(0) vec4f {
     var luminance = 0.0;
     var direction = vec2f(0.0, 0.0);
     var depth = -1.0;
+    var color = BACKGROUND_COLOR;
 
     var t = 0.0;
 
@@ -204,6 +213,7 @@ fn main_fragment(in: VertexOut) -> @location(0) vec4f {
         if (d_scene < epsilon) {
             let normal = calc_normal(p);
             let p_relative = p - cam_pos;
+            color = SHELL_BASE_COLOR;
 
             // Simple lighting (luminance).
             let normal_amount = dot(normal, light_dir);
@@ -246,7 +256,10 @@ fn main_fragment(in: VertexOut) -> @location(0) vec4f {
         t += step_scale * min(d_scene, d_ground);
     }
 
-    return vec4f(luminance, direction, depth);
+    return FragmentOut(
+        vec4f(luminance, direction, depth),
+        vec4f(color, 1.0),
+    );
 }
 `;
 
@@ -297,13 +310,18 @@ class ShellGpuResources implements LdzSceneGpuResources {
  * LDZ scene module for a shell-like point cloud SDF.
  */
 export class ShellLdzSceneModule implements LdzSceneModule<ShellCpuData> {
+    public static readonly GPU_SEED = 0;
+
     private static readonly POINT_COUNT = 70;
     private static readonly BASE_RADIUS = 0.39;
 
     readonly id = "shell";
     readonly fragmentShader = WGSL_FRAGMENT_SHADER;
     readonly fragmentEntryPoint = "main_fragment";
-    readonly outputSpec = { mode: "ldz-only" } as const;
+    readonly outputSpec = {
+        mode: "ldz-plus-color",
+        colorTextureFormat: "rgba8unorm",
+    } as const;
     readonly bindGroupLayoutEntries: readonly GPUBindGroupLayoutEntry[] = [
         {
             binding: 0,
