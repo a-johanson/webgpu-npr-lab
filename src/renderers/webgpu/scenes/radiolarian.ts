@@ -30,6 +30,7 @@ type RadiolarianParameters = {
     grainChromaAmplitude: number;
     grainHueAmplitude: number;
     minChromaForHueJitter: number;
+    shellDitherLightnessAmplitude: number;
 };
 
 const RADIOLARIAN_PARAMS: RadiolarianParameters = {
@@ -47,6 +48,7 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     grainChromaAmplitude: 0.016,
     grainHueAmplitude: (1.2 * Math.PI) / 180.0,
     minChromaForHueJitter: 0.025,
+    shellDitherLightnessAmplitude: 0.006,
 };
 
 const BG_STOPS: readonly GradientStop[] = [
@@ -108,6 +110,7 @@ const GRAIN_LIGHTNESS_AMPLITUDE: f32 = ${parameters.grainLightnessAmplitude};
 const GRAIN_CHROMA_AMPLITUDE: f32 = ${parameters.grainChromaAmplitude};
 const GRAIN_HUE_AMPLITUDE: f32 = ${parameters.grainHueAmplitude};
 const MIN_CHROMA_FOR_HUE_JITTER: f32 = ${parameters.minChromaForHueJitter};
+const SHELL_DITHER_LIGHTNESS_AMPLITUDE: f32 = ${parameters.shellDitherLightnessAmplitude};
 
 struct SiteData {
     site: vec4f,
@@ -322,14 +325,20 @@ fn oklch_to_oklab(lch: vec3f) -> vec3f {
     return vec3f(lightness, chroma * cos(hue), chroma * sin(hue));
 }
 
-fn sample_shell_color_srgb(p: vec3f, normal: vec3f) -> vec3f {
+fn sample_shell_color_srgb(p: vec3f, normal: vec3f, pixel_coord: vec2u, seed: u32) -> vec3f {
     let inner = ${vec3Literal(shellInnerOkLab)};
     let outer = ${vec3Literal(shellOuterOkLab)};
 
     let r = length(p);
     let direction = p / max(r, 1.0e-6);
     let t = abs(dot(direction, normal));
-    let color_oklab = mix(inner, outer, t);
+    let color_oklab_base = mix(inner, outer, t);
+    let dither = triangular_white_noise(pixel_coord, seed);
+    let color_oklab = vec3f(
+        clamp(color_oklab_base.x + SHELL_DITHER_LIGHTNESS_AMPLITUDE * dither, 0.0, 1.0),
+        color_oklab_base.y,
+        color_oklab_base.z
+    );
     return linear_to_srgb(oklab_to_linear_rgb(color_oklab));
 }
 
@@ -379,6 +388,17 @@ fn pcg2d(v_in: vec2u) -> vec2u {
     v ^= (v >> vec2u(16u));
 
     return v;
+}
+
+fn u32_to_unit_float(value: u32) -> f32 {
+    return f32(value) * (1.0 / 4294967296.0);
+}
+
+fn triangular_white_noise(pixel_coord: vec2u, seed: u32) -> f32 {
+    let hashed = pcg2d(pixel_coord + vec2u(seed, seed ^ 0x9E3779B9u));
+    let u0 = u32_to_unit_float(hashed.x);
+    let u1 = u32_to_unit_float(hashed.y);
+    return u0 - u1;
 }
 
 const GRAD2: array<vec2f, 12> = array<vec2f, 12>(
@@ -511,6 +531,11 @@ fn grain_lch(lab: vec3f, grain_coord: vec2f, seed: u32) -> vec3f {
 fn main_fragment(in: VertexOut) -> FragmentOut {
     // Ray setup.
     let uv = in.uv * 2.0 - 1.0;
+    let pixel_coord = in.uv * vec2f(
+        global_uniforms.aspect * global_uniforms.viewport_height_px,
+        global_uniforms.viewport_height_px
+    );
+    let pixel_index = vec2u(pixel_coord);
 
     // Light setup.
     let light_dir = normalize(vec3f(0.5, 1.0, 2.0));
@@ -554,7 +579,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
             let normal = calc_normal(p);
             let p_relative = p - cam_pos;
 
-            color = sample_shell_color_srgb(p, normal);
+            color = sample_shell_color_srgb(p, normal, pixel_index, global_uniforms.seed);
 
             // Simple lighting (luminance).
             let normal_amount = dot(normal, light_dir);
@@ -588,10 +613,6 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
 
     if (depth < 0.0) {
         let bg_oklab = sample_background_gradient_oklab(in.uv.y);
-        let pixel_coord = in.uv * vec2f(
-            global_uniforms.aspect * global_uniforms.viewport_height_px,
-            global_uniforms.viewport_height_px
-        );
         let mm_per_pixel = 1.0 / global_uniforms.pixels_per_mm;
         let grain_coord = pixel_coord * mm_per_pixel * INVERSE_GRAIN_SIZE_MM;
         let bg_with_grain = grain_lch(bg_oklab, grain_coord, global_uniforms.seed);
