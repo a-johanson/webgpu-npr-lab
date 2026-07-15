@@ -7,9 +7,9 @@
         "strict": true,
         "outDir": "./public/js",
         "rootDir": "./src",
-        "baseUrl": ".",
         "noEmitOnError": true,
         "sourceMap": true,
+        "skipLibCheck": true,
         "types": ["@webgpu/types"]
     },
     "include": ["./src/**/*"]

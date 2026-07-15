@@ -23,9 +23,9 @@
     "license": "MIT",
     "type": "module",
     "devDependencies": {
-        "@biomejs/biome": "2.3.15",
-        "@webgpu/types": "0.1.69",
-        "esbuild": "0.27.3",
-        "typescript": "5.9.3"
+        "@biomejs/biome": "2.5.4",
+        "@webgpu/types": "0.1.71",
+        "esbuild": "0.28.1",
+        "typescript": "7.0.2"
     }
 }
