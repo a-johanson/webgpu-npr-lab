@@ -22,6 +22,7 @@ type RadiolarianParameters = {
     corridorScale: number;
     shellRadius: number;
     shellThickness: number;
+    shellMidSmoothness: number;
     cornerSmoothness: number;
     csgSmoothness: number;
     cellBlendSmoothness: number;
@@ -40,6 +41,7 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     corridorScale: 1.5,
     shellRadius: 1.0,
     shellThickness: 0.05,
+    shellMidSmoothness: 0.01,
     cornerSmoothness: 0.12 / 6.0,
     csgSmoothness: 0.009,
     cellBlendSmoothness: 0.01,
@@ -97,6 +99,7 @@ const POINT_COUNT: u32 = ${parameters.pointCount}u;
 const CORRIDOR_SCALE: f32 = ${parameters.corridorScale};
 const SHELL_RADIUS: f32 = ${parameters.shellRadius};
 const SHELL_THICKNESS: f32 = ${parameters.shellThickness};
+const SHELL_MID_SMOOTHNESS: f32 = ${parameters.shellMidSmoothness};
 const CORNER_SMOOTHNESS: f32 = ${parameters.cornerSmoothness};
 const CSG_SMOOTHNESS: f32 = ${parameters.csgSmoothness};
 const CELL_BLEND_SMOOTHNESS: f32 = ${parameters.cellBlendSmoothness};
@@ -125,6 +128,10 @@ fn smax(a: f32, b: f32, k_in: f32) -> f32 {
 
 fn smin(a: f32, b: f32, k_in: f32) -> f32 {
     return -smax(-a, -b, k_in);
+}
+
+fn smooth_abs(x: f32, k: f32) -> f32 {
+    return sqrt(x * x + k * k) - k;
 }
 
 fn compute_poly_distance(site_index: u32, direction: vec3f) -> f32 {
@@ -157,8 +164,10 @@ fn compute_poly_distance(site_index: u32, direction: vec3f) -> f32 {
 
 fn scene_sdf(p: vec3f) -> f32 {
     // 1) Base shell band around SHELL_RADIUS with thickness SHELL_THICKNESS.
+    //    Uses smooth_abs to round the C1 kink of abs() at the shell mid-radius,
+    //    which would otherwise create a visible crease on the inside of the hole walls.
     let radius = length(p);
-    let d_shell = abs(radius - SHELL_RADIUS) - 0.5 * SHELL_THICKNESS;
+    let d_shell = smooth_abs(radius - SHELL_RADIUS, SHELL_MID_SMOOTHNESS) - smooth_abs(0.5 * SHELL_THICKNESS, SHELL_MID_SMOOTHNESS);
 
     let point_count = POINT_COUNT;
     if (point_count == 0u) {
