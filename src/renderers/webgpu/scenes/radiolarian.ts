@@ -3,7 +3,6 @@ import {
     type GradientStop,
     linearToOklab,
     type OklabGradientStop,
-    oklchToOklab,
     srgbToLinear,
 } from "../../../npr/color";
 import { createSfc32 } from "../../../npr/sfc32";
@@ -30,7 +29,6 @@ type RadiolarianParameters = {
     grainChromaAmplitude: number;
     grainHueAmplitude: number;
     minChromaForHueJitter: number;
-    shellDitherLightnessAmplitude: number;
 };
 
 const RADIOLARIAN_PARAMS: RadiolarianParameters = {
@@ -48,8 +46,9 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     grainChromaAmplitude: 0.016,
     grainHueAmplitude: (1.2 * Math.PI) / 180.0,
     minChromaForHueJitter: 0.025,
-    shellDitherLightnessAmplitude: 0.006,
 };
+
+const FG_SRGB: Color3 = [1.0, 0.98, 0.95];
 
 const BG_STOPS: readonly GradientStop[] = [
     { position: 0.07, srgb: [0.106, 0.019, 0.134] },
@@ -57,9 +56,6 @@ const BG_STOPS: readonly GradientStop[] = [
     { position: 0.3, srgb: [0.729, 0.268, 0.396] },
     { position: 0.6, srgb: [0.921, 0.67, 0.582] },
 ];
-
-const SHELL_INNER_OKLCH: Color3 = [0.98, 0.13, 2.5];
-const SHELL_OUTER_OKLCH: Color3 = [0.99, 0.01, 2.5];
 
 const buildFragmentShader = (
     parameters: RadiolarianParameters,
@@ -73,8 +69,6 @@ const buildFragmentShader = (
         position: stop.position,
         oklab: linearToOklab(srgbToLinear(stop.srgb)),
     }));
-    const shellInnerOkLab = oklchToOklab(SHELL_INNER_OKLCH);
-    const shellOuterOkLab = oklchToOklab(SHELL_OUTER_OKLCH);
     const floatLiteral = (v: number): string => v.toPrecision(8);
     const vec3Literal = (v: Color3): string =>
         `vec3f(${floatLiteral(v[0])}, ${floatLiteral(v[1])}, ${floatLiteral(v[2])})`;
@@ -110,7 +104,6 @@ const GRAIN_LIGHTNESS_AMPLITUDE: f32 = ${parameters.grainLightnessAmplitude};
 const GRAIN_CHROMA_AMPLITUDE: f32 = ${parameters.grainChromaAmplitude};
 const GRAIN_HUE_AMPLITUDE: f32 = ${parameters.grainHueAmplitude};
 const MIN_CHROMA_FOR_HUE_JITTER: f32 = ${parameters.minChromaForHueJitter};
-const SHELL_DITHER_LIGHTNESS_AMPLITUDE: f32 = ${parameters.shellDitherLightnessAmplitude};
 
 struct SiteData {
     site: vec4f,
@@ -323,23 +316,6 @@ fn oklch_to_oklab(lch: vec3f) -> vec3f {
     let chroma = lch.y;
     let hue = lch.z;
     return vec3f(lightness, chroma * cos(hue), chroma * sin(hue));
-}
-
-fn sample_shell_color_srgb(p: vec3f, normal: vec3f, pixel_coord: vec2u, seed: u32) -> vec3f {
-    let inner = ${vec3Literal(shellInnerOkLab)};
-    let outer = ${vec3Literal(shellOuterOkLab)};
-
-    let r = length(p);
-    let direction = p / max(r, 1.0e-6);
-    let t = abs(dot(direction, normal));
-    let color_oklab_base = mix(inner, outer, t);
-    let dither = triangular_white_noise(pixel_coord, seed);
-    let color_oklab = vec3f(
-        clamp(color_oklab_base.x + SHELL_DITHER_LIGHTNESS_AMPLITUDE * dither, 0.0, 1.0),
-        color_oklab_base.y,
-        color_oklab_base.z
-    );
-    return linear_to_srgb(oklab_to_linear_rgb(color_oklab));
 }
 
 fn sample_background_gradient_oklab(t: f32) -> vec3f {
@@ -569,7 +545,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     var luminance = 0.0;
     var direction = vec2f(0.0, 0.0);
     var depth = -1.0;
-    var color = vec3f(0.0);
+    var color = ${vec3Literal(FG_SRGB)};
 
     for (var step = 0; step < max_steps; step++) {
         let p = cam_pos + ray_dir * t;
@@ -578,8 +554,6 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
         if (d < epsilon) {
             let normal = calc_normal(p);
             let p_relative = p - cam_pos;
-
-            color = sample_shell_color_srgb(p, normal, pixel_index, global_uniforms.seed);
 
             // Simple lighting (luminance).
             let normal_amount = dot(normal, light_dir);
