@@ -51,18 +51,16 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
 const FG_SRGB: Color3 = [1.0, 0.98, 0.95];
 
 const BG_STOPS: readonly GradientStop[] = [
-    { position: 0.07, srgb: [0.106, 0.019, 0.134] },
-    { position: 0.18, srgb: [0.282, 0.112, 0.302] },
-    { position: 0.3, srgb: [0.729, 0.268, 0.396] },
-    { position: 0.6, srgb: [0.921, 0.67, 0.582] },
+    { position: 0.0, srgb: [0.004, 0.043, 0.016] },
+    { position: 1.0, srgb: [0.008, 0.808, 0.718] },
 ];
 
 const buildFragmentShader = (
     parameters: RadiolarianParameters,
     bgStops: readonly GradientStop[],
 ): string => {
-    if (bgStops.length !== 4) {
-        throw new Error("Expected exactly 4 background stops");
+    if (bgStops.length !== 2) {
+        throw new Error("Expected exactly 2 background stops");
     }
 
     const oklabBgStops: OklabGradientStop[] = bgStops.map((stop) => ({
@@ -321,13 +319,9 @@ fn oklch_to_oklab(lch: vec3f) -> vec3f {
 fn sample_background_gradient_oklab(t: f32) -> vec3f {
     let stop0 = ${floatLiteral(oklabBgStops[0].position)};
     let stop1 = ${floatLiteral(oklabBgStops[1].position)};
-    let stop2 = ${floatLiteral(oklabBgStops[2].position)};
-    let stop3 = ${floatLiteral(oklabBgStops[3].position)};
 
     let color0 = ${vec3Literal(oklabBgStops[0].oklab)};
     let color1 = ${vec3Literal(oklabBgStops[1].oklab)};
-    let color2 = ${vec3Literal(oklabBgStops[2].oklab)};
-    let color3 = ${vec3Literal(oklabBgStops[3].oklab)};
 
     if (t <= stop0) {
         return color0;
@@ -336,15 +330,7 @@ fn sample_background_gradient_oklab(t: f32) -> vec3f {
         let segment_t = (t - stop0) / (stop1 - stop0);
         return mix(color0, color1, segment_t);
     }
-    if (t <= stop2) {
-        let segment_t = (t - stop1) / (stop2 - stop1);
-        return mix(color1, color2, segment_t);
-    }
-    if (t <= stop3) {
-        let segment_t = (t - stop2) / (stop3 - stop2);
-        return mix(color2, color3, segment_t);
-    }
-    return color3;
+    return color1;
 }
 
 // Cf. https://www.shadertoy.com/view/XlGcRh
@@ -517,8 +503,8 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     let light_dir = normalize(vec3f(0.5, 1.0, 2.0));
 
     // Camera setup.
-    let cam_pos = vec3f(0.5, 0.15, 3.8);
-    let cam_target = vec3f(0.0, 0.0, 0.0);
+    let cam_pos = vec3f(0.5, -0.4, 1.5);
+    let cam_target = vec3f(0.0, 0.6, 0.0);
     let cam_up = vec3f(0.0, 1.0, 0.0);
 
     // Camera basis.
@@ -526,7 +512,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     let cam_right = normalize(cross(cam_forward, cam_up));
     let cam_true_up = cross(cam_right, cam_forward);
 
-    let fov = radians(40.0);
+    let fov = radians(50.0);
     let fov_scale = tan(0.5 * fov);
     let ray_dir = normalize(
         cam_right * uv.x * global_uniforms.aspect * fov_scale +
