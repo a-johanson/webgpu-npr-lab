@@ -24,6 +24,7 @@ type RadiolarianParameters = {
     shellThickness: number;
     cornerSmoothness: number;
     csgSmoothness: number;
+    cellBlendSmoothness: number;
     grainSizeMm: number;
     grainLightnessAmplitude: number;
     grainChromaAmplitude: number;
@@ -40,7 +41,8 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     shellRadius: 1.0,
     shellThickness: 0.05,
     cornerSmoothness: 0.12 / 6.0,
-    csgSmoothness: 0.05 / 6.0,
+    csgSmoothness: 0.009,
+    cellBlendSmoothness: 0.01,
     grainSizeMm: 0.2,
     grainLightnessAmplitude: 0.05,
     grainChromaAmplitude: 0.016,
@@ -97,6 +99,7 @@ const SHELL_RADIUS: f32 = ${parameters.shellRadius};
 const SHELL_THICKNESS: f32 = ${parameters.shellThickness};
 const CORNER_SMOOTHNESS: f32 = ${parameters.cornerSmoothness};
 const CSG_SMOOTHNESS: f32 = ${parameters.csgSmoothness};
+const CELL_BLEND_SMOOTHNESS: f32 = ${parameters.cellBlendSmoothness};
 const INVERSE_GRAIN_SIZE_MM: f32 = ${1.0 / parameters.grainSizeMm};
 const GRAIN_LIGHTNESS_AMPLITUDE: f32 = ${parameters.grainLightnessAmplitude};
 const GRAIN_CHROMA_AMPLITUDE: f32 = ${parameters.grainChromaAmplitude};
@@ -120,6 +123,38 @@ fn smax(a: f32, b: f32, k_in: f32) -> f32 {
     return max(a, b) + h * h * h * k * (1.0 / 6.0);
 }
 
+fn smin(a: f32, b: f32, k_in: f32) -> f32 {
+    return -smax(-a, -b, k_in);
+}
+
+fn compute_poly_distance(site_index: u32, direction: vec3f) -> f32 {
+    let site = sites[site_index];
+    let normal = site.site.xyz;
+    let tangent_u = site.tangent_u.xyz;
+    let tangent_v = site.tangent_v.xyz;
+
+    let safe_denominator = max(dot(direction, normal), 1e-4);
+    let gnomonic = direction / safe_denominator;
+    let tangent_x = dot(gnomonic, tangent_u);
+    let tangent_y = dot(gnomonic, tangent_v);
+
+    let constraint_count = u32(clamp(site.metadata.x, 0.0, f32(MAX_NEIGHBORS)));
+    var poly_distance = 1e9;
+    if (constraint_count > 0u) {
+        poly_distance = -1e9;
+        for (var constraint_index: u32 = 0u; constraint_index < constraint_count; constraint_index++) {
+            let constraint = site.constraints[constraint_index];
+            let a = constraint.x;
+            let b = constraint.y;
+            let c_contracted = constraint.z;
+            let inverse_length = constraint.w;
+            let signed_halfplane = (a * tangent_x + b * tangent_y - c_contracted) * inverse_length;
+            poly_distance = smax(poly_distance, signed_halfplane, CORNER_SMOOTHNESS);
+        }
+    }
+    return poly_distance;
+}
+
 fn scene_sdf(p: vec3f) -> f32 {
     // 1) Base shell band around SHELL_RADIUS with thickness SHELL_THICKNESS.
     let radius = length(p);
@@ -134,9 +169,8 @@ fn scene_sdf(p: vec3f) -> f32 {
     let safe_radius = max(radius, 1e-6);
     let direction = p / safe_radius;
 
-    // 2) Owning-site selection.
-    //    Search a corridor in index space, then pick owner_index by maximum alignment
-    //    max(dot(direction, sites[i].site.xyz)).
+    // 2) Corridor search.  Find the three sites with strongest alignment to
+    //    the direction (closest on the sphere).
     let point_count_f = f32(point_count);
     let approximate_index = ((1.0 - direction.y) * point_count_f * 0.5) - 0.5;
     let center_index = i32(round(approximate_index));
@@ -145,54 +179,43 @@ fn scene_sdf(p: vec3f) -> f32 {
     let index_min = u32(max(center_index - corridor_half_width, 0));
     let index_max = u32(min(center_index + corridor_half_width, i32(point_count) - 1));
 
-    var owner_index = index_min;
+    var best_index = index_min;
     var best_alignment = -2.0;
+    var second_index = index_min;
+    var second_alignment = -2.0;
+    var third_index = index_min;
+    var third_alignment = -2.0;
     for (var i = index_min; i <= index_max; i++) {
         let alignment = dot(direction, sites[i].site.xyz);
         if (alignment > best_alignment) {
+            third_alignment = second_alignment;
+            third_index = second_index;
+            second_alignment = best_alignment;
+            second_index = best_index;
             best_alignment = alignment;
-            owner_index = i;
+            best_index = i;
+        } else if (alignment > second_alignment) {
+            third_alignment = second_alignment;
+            third_index = second_index;
+            second_alignment = alignment;
+            second_index = i;
+        } else if (alignment > third_alignment) {
+            third_alignment = alignment;
+            third_index = i;
         }
     }
 
-    // 3) Gnomonic projection to the owning site's tangent plane.
-    //    gnomonic = direction / dot(direction, owner_normal) maps the sphere to the tangent plane
-    //    at owner_normal. Voronoi boundaries on the sphere are great-circle arcs (equal-dot loci);
-    //    under gnomonic projection they become straight lines on that plane.
-    //    tangent_x/tangent_y are 2D coordinates in the owner's (owner_u, owner_v) frame.
-    //    safe_denom is clamped only to avoid numerical blow-up near the tangent horizon.
-    let owner = sites[owner_index];
-    let owner_normal = owner.site.xyz;
-    let owner_u = owner.tangent_u.xyz;
-    let owner_v = owner.tangent_v.xyz;
+    // 3) Compute poly distances for the top 3 sites.
+    let poly_distance_0 = compute_poly_distance(best_index, direction);
+    let poly_distance_1 = compute_poly_distance(second_index, direction);
+    let poly_distance_2 = compute_poly_distance(third_index, direction);
 
-    let safe_denom = max(dot(direction, owner_normal), 1e-4);
-    let gnomonic = direction / safe_denom;
-    let tangent_x = dot(gnomonic, owner_u);
-    let tangent_y = dot(gnomonic, owner_v);
-
-    // 4) Contracted cell footprint from precomputed half-plane constraints.
-    //    Each neighbor defines a line in tangent coordinates:
-    //      a * tangent_x + b * tangent_y - c_contracted = 0
-    //    and signed_halfplane <= 0 selects the kept side.
-    //    Geometrically, this line is the gnomonic image of the spherical bisector
-    //    (a great-circle boundary between owner_normal and the neighbor direction),
-    //    shifted inward by c_contracted for contraction.
-    //    Smooth-max over all constraints gives a smooth intersection (d_poly < 0 inside).
-    let constraint_count = u32(clamp(owner.metadata.x, 0.0, f32(MAX_NEIGHBORS)));
-    var d_poly = 1e9;
-    if (constraint_count > 0u) {
-        d_poly = -1e9;
-        for (var constraint_index: u32 = 0u; constraint_index < constraint_count; constraint_index++) {
-            let constraint = owner.constraints[constraint_index];
-            let a = constraint.x;
-            let b = constraint.y;
-            let c_contracted = constraint.z;
-            let inverse_length = constraint.w;
-            let signed_halfplane = (a * tangent_x + b * tangent_y - c_contracted) * inverse_length;
-            d_poly = smax(d_poly, signed_halfplane, CORNER_SMOOTHNESS);
-        }
-    }
+    // 4) Combine via smooth min to avoid creases at cell boundaries.
+    //    At 2-way boundaries both near-zero values are rounded together;
+    //    at 3-way vertices all three participate; deep inside a cell only
+    //    the closest site matters (smin = min for well-separated values).
+    let combined_poly = smin(poly_distance_0, poly_distance_1, CELL_BLEND_SMOOTHNESS);
+    let d_poly = smin(combined_poly, poly_distance_2, CELL_BLEND_SMOOTHNESS);
 
     // 5) Radial slab for through-cut extrusion.
     //    d_slab < 0 means radius lies within [SHELL_RADIUS - SHELL_THICKNESS,
