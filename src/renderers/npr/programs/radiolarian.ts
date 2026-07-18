@@ -42,15 +42,15 @@ export class RadiolarianNprProgramModule implements NprProgramModule {
         const pixelsPerMm = dpi / 25.4;
 
         const config = {
-            dSepMax: 2.0 * pixelsPerMm,
+            dSepMax: 4.25 * pixelsPerMm,
             dSepShadowFactor: 0.4,
             gammaLuminance: 2.0,
             dTestFactor: 0.9,
-            dStep: 0.3 * pixelsPerMm,
+            dStep: 0.6 * pixelsPerMm,
             maxDepthStep: 0.05,
             maxAccumAngle: Math.PI * 0.6,
             maxHatchedLuminance: 1.9,
-            maxSteps: 750,
+            maxSteps: 200,
             minSteps: 10,
             orientationOffset: 0.0,
             maxAreaDeviation: 0.25,
@@ -78,7 +78,7 @@ export class RadiolarianNprProgramModule implements NprProgramModule {
 
         ctx2d.strokeStyle = "#000";
         ctx2d.fillStyle = "#000";
-        ctx2d.lineWidth = 0.22 * pixelsPerMm;
+        ctx2d.lineWidth = 0.42 * pixelsPerMm;
         ctx2d.lineCap = "round";
         ctx2d.lineJoin = "round";
 

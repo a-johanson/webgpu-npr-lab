@@ -31,6 +31,8 @@ type RadiolarianParameters = {
     grainChromaAmplitude: number;
     grainHueAmplitude: number;
     minChromaForHueJitter: number;
+    glowStrength: number;
+    glowFalloff: number;
 };
 
 const RADIOLARIAN_PARAMS: RadiolarianParameters = {
@@ -45,11 +47,13 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     cornerSmoothness: 0.12 / 6.0,
     csgSmoothness: 0.009,
     cellBlendSmoothness: 0.01,
-    grainSizeMm: 0.2,
+    grainSizeMm: 0.4,
     grainLightnessAmplitude: 0.05,
     grainChromaAmplitude: 0.016,
     grainHueAmplitude: (1.2 * Math.PI) / 180.0,
     minChromaForHueJitter: 0.025,
+    glowStrength: 0.3,
+    glowFalloff: 250.0,
 };
 
 const FG_SRGB: Color3 = [1.0, 0.98, 0.95];
@@ -108,6 +112,8 @@ const GRAIN_LIGHTNESS_AMPLITUDE: f32 = ${parameters.grainLightnessAmplitude};
 const GRAIN_CHROMA_AMPLITUDE: f32 = ${parameters.grainChromaAmplitude};
 const GRAIN_HUE_AMPLITUDE: f32 = ${parameters.grainHueAmplitude};
 const MIN_CHROMA_FOR_HUE_JITTER: f32 = ${parameters.minChromaForHueJitter};
+const GLOW_STRENGTH: f32 = ${parameters.glowStrength};
+const GLOW_FALLOFF: f32 = ${parameters.glowFalloff};
 
 struct SiteData {
     site: vec4f,
@@ -563,11 +569,13 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     var luminance = 0.0;
     var direction = vec2f(0.0, 0.0);
     var depth = -1.0;
+    var min_dist = 1e9;
     var color = ${vec3Literal(FG_SRGB)};
 
     for (var step = 0; step < max_steps; step++) {
         let p = cam_pos + ray_dir * t;
         let d = scene_sdf(p);
+        min_dist = min(min_dist, d);
 
         if (d < epsilon) {
             let normal = calc_normal(p);
@@ -608,7 +616,9 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
         let mm_per_pixel = 1.0 / global_uniforms.pixels_per_mm;
         let grain_coord = pixel_coord * mm_per_pixel * INVERSE_GRAIN_SIZE_MM;
         let bg_with_grain = grain_lch(bg_oklab, grain_coord, global_uniforms.seed);
-        color = linear_to_srgb(oklab_to_linear_rgb(bg_with_grain));
+        let bg_color = linear_to_srgb(oklab_to_linear_rgb(bg_with_grain));
+        let glow_strength = GLOW_STRENGTH * exp(-min_dist * GLOW_FALLOFF);
+        color = mix(bg_color, color, glow_strength);
     }
 
     return FragmentOut(
