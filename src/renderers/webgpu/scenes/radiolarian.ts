@@ -65,11 +65,14 @@ const BG_STOPS: readonly GradientStop[] = [
 
 const buildFragmentShader = (
     parameters: RadiolarianParameters,
+    fg_srgb: Color3,
     bgStops: readonly GradientStop[],
 ): string => {
     if (bgStops.length !== 2) {
         throw new Error("Expected exactly 2 background stops");
     }
+
+    const fg_oklab = linearToOklab(srgbToLinear(fg_srgb));
 
     const oklabBgStops: OklabGradientStop[] = bgStops.map((stop) => ({
         position: stop.position,
@@ -616,9 +619,9 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
         let mm_per_pixel = 1.0 / global_uniforms.pixels_per_mm;
         let grain_coord = pixel_coord * mm_per_pixel * INVERSE_GRAIN_SIZE_MM;
         let bg_with_grain = grain_lch(bg_oklab, grain_coord, global_uniforms.seed);
-        let bg_color = linear_to_srgb(oklab_to_linear_rgb(bg_with_grain));
         let glow_strength = GLOW_STRENGTH * exp(-min_dist * GLOW_FALLOFF);
-        color = mix(bg_color, color, glow_strength);
+        let bg_with_glow = mix(bg_with_grain, ${vec3Literal(fg_oklab)}, glow_strength);
+        color = linear_to_srgb(oklab_to_linear_rgb(bg_with_glow));
     }
 
     return FragmentOut(
@@ -671,6 +674,7 @@ export class RadiolarianLdzSceneModule implements LdzSceneModule<RadiolarianCpuD
 
     private static readonly FRAGMENT_SHADER = buildFragmentShader(
         RADIOLARIAN_PARAMS,
+        FG_SRGB,
         BG_STOPS,
     );
 
