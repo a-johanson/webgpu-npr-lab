@@ -28,3 +28,36 @@ canvas {
 .pb-40 {
     padding-bottom: 40px;
 }
+
+.npr-history-controls {
+    width: fit-content;
+    margin: 10px auto;
+}
+
+.npr-history {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    overflow-x: auto;
+    width: fit-content;
+    max-width: 100%;
+    margin: 10px auto;
+    padding: 8px;
+    border: 2px solid #444;
+}
+
+.npr-history-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.npr-history-item canvas {
+    margin: 0;
+    border: 1px solid #888;
+}
+
+.npr-history-item .label {
+    font-size: 0.9rem;
+    margin-top: 4px;
+}

@@ -21,14 +21,20 @@
     <button type="button" id="incrementGpuSeed">+1</button>
     <button type="button" id="randomizeGpuSeed">Rand</button>
     <label><input type="checkbox" id="autoRerenderNpr"> Auto re-render NPR</label>
+    <label><input type="checkbox" id="autoSaveHistory"> Save history</label>
   </div>
 
   <canvas id="outputCanvas"></canvas>
-  <div class="controls pb-40">
+  <div class="controls pb-20">
     <label for="nprSeed">NPR Seed:</label>
     <input type="text" id="nprSeed" placeholder="Enter NPR seed">
     <button type="button" id="applyNprSeed">Apply</button>
   </div>
+
+  <div class="npr-history-controls">
+    <button type="button" id="clearNprHistory">Clear history</button>
+  </div>
+  <div id="nprHistory" class="npr-history pb-40"></div>
 
   <script type="module" src="./js/main.js"></script>
 </body>

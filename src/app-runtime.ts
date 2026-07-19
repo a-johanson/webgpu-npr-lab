@@ -84,6 +84,7 @@ export async function setupApplication<TCpuData>(
         nprIsDirty: false,
         isRendering: false,
         autoRerenderNpr: false,
+        autoSaveHistory: false,
     });
 
     const webgpuRenderer = await WebGpuRenderer.create(
@@ -102,6 +103,8 @@ export async function setupApplication<TCpuData>(
     const gpuSeedInput = getRequiredElement<HTMLInputElement>("gpuSeed");
     const nprSeedInput = getRequiredElement<HTMLInputElement>("nprSeed");
     const autoRerenderNprCheckbox = getRequiredElement<HTMLInputElement>("autoRerenderNpr");
+    const autoSaveHistoryCheckbox = getRequiredElement<HTMLInputElement>("autoSaveHistory");
+    const clearNprHistoryButton = getRequiredElement<HTMLButtonElement>("clearNprHistory");
 
     const applyDpiButton = getRequiredElement<HTMLButtonElement>("applyDpi");
     const applyGpuSeedButton = getRequiredElement<HTMLButtonElement>("applyGpuSeed");
@@ -116,16 +119,33 @@ export async function setupApplication<TCpuData>(
         incrementGpuSeedButton.disabled = isRendering;
         randomizeGpuSeedButton.disabled = isRendering;
         applyNprSeedButton.disabled = isRendering;
-        autoRerenderNprCheckbox.disabled = isRendering;
+        autoRerenderNprCheckbox.disabled = isRendering || stateManager.get("autoSaveHistory");
+        autoSaveHistoryCheckbox.disabled = isRendering;
     });
 
     dpiInput.value = String(stateManager.get("dpi"));
     gpuSeedInput.value = String(stateManager.get("gpuSeed"));
     nprSeedInput.value = stateManager.get("nprSeed");
     autoRerenderNprCheckbox.checked = stateManager.get("autoRerenderNpr");
+    autoSaveHistoryCheckbox.checked = stateManager.get("autoSaveHistory");
 
     autoRerenderNprCheckbox.addEventListener("change", async () => {
         await stateManager.setState({ autoRerenderNpr: autoRerenderNprCheckbox.checked });
+    });
+
+    autoSaveHistoryCheckbox.addEventListener("change", async () => {
+        if (autoSaveHistoryCheckbox.checked) {
+            await stateManager.setState({ autoSaveHistory: true, autoRerenderNpr: true });
+            autoRerenderNprCheckbox.checked = true;
+            autoRerenderNprCheckbox.disabled = true;
+        } else {
+            await stateManager.setState({ autoSaveHistory: false });
+            autoRerenderNprCheckbox.disabled = stateManager.get("isRendering");
+        }
+    });
+
+    clearNprHistoryButton.addEventListener("click", () => {
+        nprRenderer.clearHistory();
     });
 
     applyDpiButton.addEventListener("click", async () => {

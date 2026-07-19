@@ -20,4 +20,5 @@ export type AppState = {
     nprIsDirty: boolean;
     isRendering: boolean;
     autoRerenderNpr: boolean;
+    autoSaveHistory: boolean;
 };
