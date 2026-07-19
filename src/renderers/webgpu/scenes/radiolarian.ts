@@ -412,13 +412,6 @@ fn u32_to_unit_float(value: u32) -> f32 {
     return f32(value) * (1.0 / 4294967296.0);
 }
 
-fn triangular_white_noise(pixel_coord: vec2u, seed: u32) -> f32 {
-    let hashed = pcg2d(pixel_coord + vec2u(seed, seed ^ 0x9E3779B9u));
-    let u0 = u32_to_unit_float(hashed.x);
-    let u1 = u32_to_unit_float(hashed.y);
-    return u0 - u1;
-}
-
 const GRAD2: array<vec2f, 12> = array<vec2f, 12>(
     vec2f( 1.0,  1.0),
     vec2f(-1.0,  1.0),
