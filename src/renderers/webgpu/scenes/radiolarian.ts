@@ -33,6 +33,11 @@ type RadiolarianParameters = {
     minChromaForHueJitter: number;
     glowStrength: number;
     glowFalloff: number;
+    particleSizeMm: number;
+    particleGlowStrength: number;
+    particleFalloffRate: number;
+    particleWarpStrength: number;
+    particleWarpScale: number;
 };
 
 const RADIOLARIAN_PARAMS: RadiolarianParameters = {
@@ -52,15 +57,20 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     grainChromaAmplitude: 0.016,
     grainHueAmplitude: (1.2 * Math.PI) / 180.0,
     minChromaForHueJitter: 0.025,
-    glowStrength: 0.3,
+    glowStrength: 0.25,
     glowFalloff: 250.0,
+    particleSizeMm: 120.0,
+    particleGlowStrength: 0.45,
+    particleFalloffRate: 32.0,
+    particleWarpStrength: 0.17,
+    particleWarpScale: 0.45,
 };
 
 const FG_SRGB: Color3 = [1.0, 0.98, 0.95];
 
 const BG_STOPS: readonly GradientStop[] = [
-    { position: 0.0, srgb: [0.004, 0.043, 0.016] },
-    { position: 1.0, srgb: [0.008, 0.808, 0.718] },
+    { position: 0.0, srgb: [0.004, 0.416, 0.553] },
+    { position: 1.0, srgb: [0.008, 0.259 * 0.7, 0.447 * 0.7] },
 ];
 
 const buildFragmentShader = (
@@ -117,6 +127,11 @@ const GRAIN_HUE_AMPLITUDE: f32 = ${parameters.grainHueAmplitude};
 const MIN_CHROMA_FOR_HUE_JITTER: f32 = ${parameters.minChromaForHueJitter};
 const GLOW_STRENGTH: f32 = ${parameters.glowStrength};
 const GLOW_FALLOFF: f32 = ${parameters.glowFalloff};
+const PARTICLE_SIZE_MM: f32 = ${parameters.particleSizeMm};
+const PARTICLE_GLOW_STRENGTH: f32 = ${parameters.particleGlowStrength};
+const PARTICLE_FALLOFF_RATE: f32 = ${parameters.particleFalloffRate};
+const PARTICLE_WARP_STRENGTH: f32 = ${parameters.particleWarpStrength};
+const PARTICLE_WARP_SCALE: f32 = ${parameters.particleWarpScale};
 
 struct SiteData {
     site: vec4f,
@@ -513,6 +528,28 @@ fn fbm3_simplex_2d(p: vec2f, rot_cos_sin: vec2f, seed: u32) -> f32 {
     return sum * scale;
 }
 
+fn voronoi_glow(p: vec2f, seed: u32, falloff_rate: f32) -> f32 {
+    let ip = floor(p);
+    let fp = p - ip;
+    var glow = 0.0;
+    for (var dx = -1; dx <= 1; dx++) {
+        for (var dy = -1; dy <= 1; dy++) {
+            let neighbor = ip + vec2f(f32(dx), f32(dy));
+            let hashed = pcg2d(
+                vec2u(u32(neighbor.x), u32(neighbor.y)) + vec2u(seed, seed ^ 0x9E3779B9u)
+            );
+            let offset = vec2f(
+                u32_to_unit_float(hashed.x),
+                u32_to_unit_float(hashed.y)
+            );
+            let center = vec2f(f32(dx), f32(dy)) + offset;
+            let diff = fp - center;
+            glow += exp(-dot(diff, diff) * falloff_rate);
+        }
+    }
+    return glow;
+}
+
 fn grain_lch(lab: vec3f, grain_coord: vec2f, seed: u32) -> vec3f {
     let lch = oklab_to_oklch(lab);
     let lightness = lch.x;
@@ -615,13 +652,22 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     }
 
     if (depth < 0.0) {
-        let bg_oklab = sample_background_gradient_oklab(in.uv.y);
+        let bg_gradient = sample_background_gradient_oklab(dot(in.uv, vec2(0.3, 0.7)));
         let mm_per_pixel = 1.0 / global_uniforms.pixels_per_mm;
         let grain_coord = pixel_coord * mm_per_pixel * INVERSE_GRAIN_SIZE_MM;
-        let bg_with_grain = grain_lch(bg_oklab, grain_coord, global_uniforms.seed);
+        let bg_with_grain = grain_lch(bg_gradient, grain_coord, global_uniforms.seed);
+
+        let particle_coord = pixel_coord * mm_per_pixel / PARTICLE_SIZE_MM;
+        let rot = vec2f(7.0 / 25.0, 24.0 / 25.0);
+        let warp_x = fbm3_simplex_2d(particle_coord * PARTICLE_WARP_SCALE, rot, global_uniforms.seed + 101u);
+        let warp_y = fbm3_simplex_2d(particle_coord * PARTICLE_WARP_SCALE + vec2f(10.0, 5.0), rot, global_uniforms.seed + 103u);
+        let warp = vec2f(warp_x, warp_y) * PARTICLE_WARP_STRENGTH;
+        let particle_amount = voronoi_glow(particle_coord + warp, global_uniforms.seed + 107u, PARTICLE_FALLOFF_RATE);
+        let bg_with_particles = mix(bg_with_grain, ${vec3Literal(fg_oklab)}, PARTICLE_GLOW_STRENGTH * particle_amount);
+
         let glow_strength = GLOW_STRENGTH * exp(-min_dist * GLOW_FALLOFF);
-        let bg_with_glow = mix(bg_with_grain, ${vec3Literal(fg_oklab)}, glow_strength);
-        color = linear_to_srgb(oklab_to_linear_rgb(bg_with_glow));
+        let bg_oklab = mix(bg_with_particles, ${vec3Literal(fg_oklab)}, glow_strength);
+        color = linear_to_srgb(oklab_to_linear_rgb(bg_oklab));
     }
 
     return FragmentOut(
