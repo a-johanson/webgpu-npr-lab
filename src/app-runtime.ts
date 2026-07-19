@@ -83,6 +83,7 @@ export async function setupApplication<TCpuData>(
         visualizationMode: 0,
         nprIsDirty: false,
         isRendering: false,
+        autoRerenderNpr: false,
     });
 
     const webgpuRenderer = await WebGpuRenderer.create(
@@ -100,9 +101,11 @@ export async function setupApplication<TCpuData>(
     const dpiInput = getRequiredElement<HTMLInputElement>("dpi");
     const gpuSeedInput = getRequiredElement<HTMLInputElement>("gpuSeed");
     const nprSeedInput = getRequiredElement<HTMLInputElement>("nprSeed");
+    const autoRerenderNprCheckbox = getRequiredElement<HTMLInputElement>("autoRerenderNpr");
 
     const applyDpiButton = getRequiredElement<HTMLButtonElement>("applyDpi");
     const applyGpuSeedButton = getRequiredElement<HTMLButtonElement>("applyGpuSeed");
+    const incrementGpuSeedButton = getRequiredElement<HTMLButtonElement>("incrementGpuSeed");
     const randomizeGpuSeedButton = getRequiredElement<HTMLButtonElement>("randomizeGpuSeed");
     const applyNprSeedButton = getRequiredElement<HTMLButtonElement>("applyNprSeed");
 
@@ -110,13 +113,20 @@ export async function setupApplication<TCpuData>(
         const isRendering = stateManager.get("isRendering");
         applyDpiButton.disabled = isRendering;
         applyGpuSeedButton.disabled = isRendering;
+        incrementGpuSeedButton.disabled = isRendering;
         randomizeGpuSeedButton.disabled = isRendering;
         applyNprSeedButton.disabled = isRendering;
+        autoRerenderNprCheckbox.disabled = isRendering;
     });
 
     dpiInput.value = String(stateManager.get("dpi"));
     gpuSeedInput.value = String(stateManager.get("gpuSeed"));
     nprSeedInput.value = stateManager.get("nprSeed");
+    autoRerenderNprCheckbox.checked = stateManager.get("autoRerenderNpr");
+
+    autoRerenderNprCheckbox.addEventListener("change", async () => {
+        await stateManager.setState({ autoRerenderNpr: autoRerenderNprCheckbox.checked });
+    });
 
     applyDpiButton.addEventListener("click", async () => {
         const parsedDpi = parseInt(dpiInput.value, 10);
@@ -138,6 +148,12 @@ export async function setupApplication<TCpuData>(
     applyGpuSeedButton.addEventListener("click", async () => {
         const parsedInt = parseInt(gpuSeedInput.value, 10);
         const newSeed = Number.isNaN(parsedInt) ? configuration.gpuSeed : parsedInt;
+        await stateManager.setState({ gpuSeed: newSeed, nprIsDirty: true });
+    });
+
+    incrementGpuSeedButton.addEventListener("click", async () => {
+        const newSeed = stateManager.get("gpuSeed") + 1;
+        gpuSeedInput.value = String(newSeed);
         await stateManager.setState({ gpuSeed: newSeed, nprIsDirty: true });
     });
 

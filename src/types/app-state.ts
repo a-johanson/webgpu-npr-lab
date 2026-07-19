@@ -19,4 +19,5 @@ export type AppState = {
     visualizationMode: number;
     nprIsDirty: boolean;
     isRendering: boolean;
+    autoRerenderNpr: boolean;
 };

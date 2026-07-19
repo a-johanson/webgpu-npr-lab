@@ -56,6 +56,12 @@ export class NprRenderer {
             await this.render();
         });
 
+        this.stateManager.subscribe(["gpuSeed"], async () => {
+            if (this.stateManager.get("autoRerenderNpr")) {
+                await this.render();
+            }
+        });
+
         this.stateManager.subscribe(["dimensions"], async () => {
             this.adaptToDimensions();
             await this.render();
