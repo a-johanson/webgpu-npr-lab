@@ -58,19 +58,19 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     grainHueAmplitude: (1.2 * Math.PI) / 180.0,
     minChromaForHueJitter: 0.025,
     glowStrength: 0.25,
-    glowFalloff: 250.0,
-    particleSizeMm: 120.0,
+    glowFalloff: 300.0,
+    particleSizeMm: 250.0,
     particleGlowStrength: 0.45,
-    particleFalloffRate: 32.0,
-    particleWarpStrength: 0.17,
+    particleFalloffRate: 42.0,
+    particleWarpStrength: 0.15,
     particleWarpScale: 0.45,
 };
 
 const FG_SRGB: Color3 = [1.0, 0.98, 0.95];
 
 const BG_STOPS: readonly GradientStop[] = [
-    { position: 0.0, srgb: [0.004, 0.416, 0.553] },
-    { position: 1.0, srgb: [0.008, 0.259 * 0.7, 0.447 * 0.7] },
+    { position: 0.0, srgb: [0.05, 0.5, 0.4] },
+    { position: 1.0, srgb: [0.0, 0.15, 0.35] },
 ];
 
 const buildFragmentShader = (
@@ -645,7 +645,8 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     }
 
     if (depth < 0.0) {
-        let bg_gradient = sample_background_gradient_oklab(dot(in.uv, vec2(0.3, 0.7)));
+        let t_gradient = pow(dot(in.uv, vec2(0.15, 0.85)), 2.0);
+        let bg_gradient = sample_background_gradient_oklab(t_gradient);
         let mm_per_pixel = 1.0 / global_uniforms.pixels_per_mm;
         let grain_coord = pixel_coord * mm_per_pixel * INVERSE_GRAIN_SIZE_MM;
         let bg_with_grain = grain_lch(bg_gradient, grain_coord, global_uniforms.seed);

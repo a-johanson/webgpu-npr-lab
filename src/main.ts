@@ -5,7 +5,7 @@ import { RadiolarianLdzSceneModule } from "./renderers/webgpu/scenes/radiolarian
 // ======= Configuration =======
 const widthCm = RadiolarianNprProgramModule.WIDTH_CM;
 const heightCm = RadiolarianNprProgramModule.HEIGHT_CM;
-const dpi = 30;
+const dpi = 25;
 const maxDebugSize = 1024;
 const gpuSeed = RadiolarianLdzSceneModule.GPU_SEED;
 const nprSeed = RadiolarianNprProgramModule.NPR_SEED;
