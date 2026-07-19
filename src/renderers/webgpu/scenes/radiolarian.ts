@@ -574,8 +574,8 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     let light_dir = normalize(vec3f(0.5, 1.0, 2.0));
 
     // Camera setup.
-    let cam_pos = vec3f(0.5, -0.4, 1.5);
-    let cam_target = vec3f(0.0, 0.6, 0.0);
+    let cam_pos = vec3f(0.5, -0.4, 2.75);
+    let cam_target = vec3f(-0.275, 0.3, 0.0);
     let cam_up = vec3f(0.0, 1.0, 0.0);
 
     // Camera basis.
@@ -645,7 +645,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     }
 
     if (depth < 0.0) {
-        let t_gradient = pow(dot(in.uv, vec2(0.15, 0.85)), 2.0);
+        let t_gradient = pow(dot(in.uv, vec2(0.15, 0.85)), 0.75);
         let bg_gradient = sample_background_gradient_oklab(t_gradient);
         let mm_per_pixel = 1.0 / global_uniforms.pixels_per_mm;
         let grain_coord = pixel_coord * mm_per_pixel * INVERSE_GRAIN_SIZE_MM;
