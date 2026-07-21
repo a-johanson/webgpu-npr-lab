@@ -46,6 +46,7 @@ type RadiolarianParameters = {
     sunRayStrength: number;
     sunRaySpread: number;
     sunRaySeparationFalloff: number;
+    sunRayNoiseMean: number;
     sunRayCutoffEdge0: number;
     sunRayCutoffEdge1: number;
 };
@@ -67,21 +68,22 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     grainChromaAmplitude: 0.016,
     grainHueAmplitude: (1.2 * Math.PI) / 180.0,
     minChromaForHueJitter: 0.025,
-    glowStrength: 0.25,
+    glowStrength: 0.15,
     glowFalloff: 300.0,
     particleSizeMm: 250.0,
-    particleGlowStrength: 0.55,
+    particleGlowStrength: 0.45,
     particleFalloffRate: 42.0,
     particleWarpStrength: 0.15,
     particleWarpScale: 0.45,
     sunRayAngle: -0.43,
-    sunRayDensity1: 5.0,
-    sunRayDensity2: 10.5,
+    sunRayDensity1: 3.5,
+    sunRayDensity2: 7.5,
     sunRayIntensity2: 0.3,
-    sunRayFalloff: 2.0,
-    sunRayStrength: 0.6,
+    sunRayFalloff: 1.75,
+    sunRayStrength: 0.3,
     sunRaySpread: 0.6,
-    sunRaySeparationFalloff: 9.0,
+    sunRaySeparationFalloff: 3.0,
+    sunRayNoiseMean: 0.0,
     sunRayCutoffEdge0: 0.05,
     sunRayCutoffEdge1: 0.35,
 };
@@ -164,6 +166,7 @@ const SUN_RAY_FALLOFF: f32 = ${parameters.sunRayFalloff};
 const SUN_RAY_STRENGTH: f32 = ${parameters.sunRayStrength};
 const SUN_RAY_SPREAD: f32 = ${parameters.sunRaySpread};
 const SUN_RAY_SEPARATION_FALLOFF: f32 = ${parameters.sunRaySeparationFalloff};
+const SUN_RAY_NOISE_MEAN: f32 = ${parameters.sunRayNoiseMean};
 const SUN_RAY_CUTOFF_EDGE_0: f32 = ${parameters.sunRayCutoffEdge0};
 const SUN_RAY_CUTOFF_EDGE_1: f32 = ${parameters.sunRayCutoffEdge1};
 
@@ -611,7 +614,7 @@ fn sun_rays(uv: vec2f, aspect: f32, seed: u32) -> f32 {
     // direction so they form streaks perpendicular to ray_param.
     let n1 = simplex_noise_2d(vec2f(ray_param * SUN_RAY_DENSITY_1, 0.0), seed + 197u);
     let n2 = simplex_noise_2d(vec2f(ray_param * SUN_RAY_DENSITY_2, 0.0), seed + 211u);
-    let rays = exp(-SUN_RAY_SEPARATION_FALLOFF * n1 * n1) + exp(-SUN_RAY_SEPARATION_FALLOFF * n2 * n2) * SUN_RAY_INTENSITY_2;
+    let rays = exp(-SUN_RAY_SEPARATION_FALLOFF * (n1 - SUN_RAY_NOISE_MEAN) * (n1 - SUN_RAY_NOISE_MEAN)) + exp(-SUN_RAY_SEPARATION_FALLOFF * (n2 - SUN_RAY_NOISE_MEAN) * (n2 - SUN_RAY_NOISE_MEAN)) * SUN_RAY_INTENSITY_2;
 
     let falloff = exp(-max(0.0, depth_from_top) * SUN_RAY_FALLOFF);
     let cutoff = smoothstep(SUN_RAY_CUTOFF_EDGE_0, SUN_RAY_CUTOFF_EDGE_1, ray_param);
@@ -633,7 +636,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
 
     // Camera setup.
     let cam_pos = vec3f(0.5, -0.4, 2.75);
-    let cam_target = vec3f(-0.275, 0.3, 0.0);
+    let cam_target = vec3f(-0.325, 0.3, 0.0);
     let cam_up = vec3f(0.0, 1.0, 0.0);
 
     // Camera basis.
