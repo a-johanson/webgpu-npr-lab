@@ -64,7 +64,7 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     csgSmoothness: 0.009,
     cellBlendSmoothness: 0.01,
     grainSizeMm: 0.4,
-    grainLightnessAmplitude: 0.05,
+    grainLightnessAmplitude: 0.035,
     grainChromaAmplitude: 0.016,
     grainHueAmplitude: (1.2 * Math.PI) / 180.0,
     minChromaForHueJitter: 0.025,
@@ -90,7 +90,7 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
 
 const FG_SRGB: Color3 = [1.0, 0.98, 0.95];
 
-const SUN_SRGB: Color3 = [0.85, 0.45, 0.15];
+const SUN_SRGB: Color3 = [0.92, 0.55, 0.18];
 
 const BG_STOPS: readonly GradientStop[] = [
     { position: 0.0, srgb: [0.05, 0.5, 0.4] },
@@ -774,7 +774,7 @@ class RadiolarianGpuResources implements LdzSceneGpuResources {
  * LDZ scene module for a radiolarian-like shell with contracted cell holes.
  */
 export class RadiolarianLdzSceneModule implements LdzSceneModule<RadiolarianCpuData> {
-    public static readonly GPU_SEED = 0;
+    public static readonly GPU_SEED = 7;
 
     private static readonly FRAGMENT_SHADER = buildFragmentShader(
         RADIOLARIAN_PARAMS,
