@@ -26,6 +26,7 @@ type RadiolarianParameters = {
     cornerSmoothness: number;
     csgSmoothness: number;
     cellBlendSmoothness: number;
+    bgParameterExponent: number;
     grainSizeMm: number;
     grainLightnessAmplitude: number;
     grainChromaAmplitude: number;
@@ -33,22 +34,7 @@ type RadiolarianParameters = {
     minChromaForHueJitter: number;
     glowStrength: number;
     glowFalloff: number;
-    particleSizeMm: number;
-    particleGlowStrength: number;
-    particleFalloffRate: number;
-    particleWarpStrength: number;
-    particleWarpScale: number;
-    sunRayAngle: number;
-    sunRayDensity1: number;
-    sunRayDensity2: number;
-    sunRayIntensity2: number;
-    sunRayFalloff: number;
-    sunRayStrength: number;
-    sunRaySpread: number;
-    sunRaySeparationFalloff: number;
-    sunRayNoiseMean: number;
-    sunRayCutoffEdge0: number;
-    sunRayCutoffEdge1: number;
+    fgLightnessBoost: number;
 };
 
 const RADIOLARIAN_PARAMS: RadiolarianParameters = {
@@ -63,52 +49,33 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     cornerSmoothness: 0.12 / 6.0,
     csgSmoothness: 0.009,
     cellBlendSmoothness: 0.01,
+    bgParameterExponent: 1.2,
     grainSizeMm: 0.4,
     grainLightnessAmplitude: 0.035,
     grainChromaAmplitude: 0.016,
     grainHueAmplitude: (1.2 * Math.PI) / 180.0,
     minChromaForHueJitter: 0.025,
-    glowStrength: 0.15,
-    glowFalloff: 300.0,
-    particleSizeMm: 250.0,
-    particleGlowStrength: 0.45,
-    particleFalloffRate: 42.0,
-    particleWarpStrength: 0.15,
-    particleWarpScale: 0.45,
-    sunRayAngle: -0.43,
-    sunRayDensity1: 3.5,
-    sunRayDensity2: 7.5,
-    sunRayIntensity2: 0.3,
-    sunRayFalloff: 1.75,
-    sunRayStrength: 0.3,
-    sunRaySpread: 0.6,
-    sunRaySeparationFalloff: 3.0,
-    sunRayNoiseMean: 0.0,
-    sunRayCutoffEdge0: 0.05,
-    sunRayCutoffEdge1: 0.35,
+    glowStrength: 0.08,
+    glowFalloff: 90.0,
+    fgLightnessBoost: 1.2,
 };
 
-const FG_SRGB: Color3 = [1.0, 0.98, 0.95];
-
-const SUN_SRGB: Color3 = [0.92, 0.55, 0.18];
+const FG_SRGB: Color3 = [1.0, 0.967, 0.872];
 
 const BG_STOPS: readonly GradientStop[] = [
-    { position: 0.0, srgb: [0.05, 0.5, 0.4] },
-    { position: 1.0, srgb: [0.0, 0.15, 0.35] },
+    { position: 0.0, srgb: [0.941, 0.71, 0.553] },
+    { position: 0.5, srgb: [0.655, 0.725, 0.635] },
+    { position: 1.0, srgb: [0.165, 0.29, 0.376] },
 ];
 
 const buildFragmentShader = (
     parameters: RadiolarianParameters,
     fg_srgb: Color3,
-    sun_srgb: Color3,
     bgStops: readonly GradientStop[],
 ): string => {
-    if (bgStops.length !== 2) {
-        throw new Error("Expected exactly 2 background stops");
+    if (bgStops.length !== 3) {
+        throw new Error("Expected exactly 3 background stops");
     }
-
-    const fg_oklab = linearToOklab(srgbToLinear(fg_srgb));
-    const sun_oklab = linearToOklab(srgbToLinear(sun_srgb));
 
     const oklabBgStops: OklabGradientStop[] = bgStops.map((stop) => ({
         position: stop.position,
@@ -146,6 +113,7 @@ const SHELL_MID_SMOOTHNESS: f32 = ${parameters.shellMidSmoothness};
 const CORNER_SMOOTHNESS: f32 = ${parameters.cornerSmoothness};
 const CSG_SMOOTHNESS: f32 = ${parameters.csgSmoothness};
 const CELL_BLEND_SMOOTHNESS: f32 = ${parameters.cellBlendSmoothness};
+const BG_PARAMETER_EXPONENT = ${parameters.bgParameterExponent};
 const INVERSE_GRAIN_SIZE_MM: f32 = ${1.0 / parameters.grainSizeMm};
 const GRAIN_LIGHTNESS_AMPLITUDE: f32 = ${parameters.grainLightnessAmplitude};
 const GRAIN_CHROMA_AMPLITUDE: f32 = ${parameters.grainChromaAmplitude};
@@ -153,22 +121,7 @@ const GRAIN_HUE_AMPLITUDE: f32 = ${parameters.grainHueAmplitude};
 const MIN_CHROMA_FOR_HUE_JITTER: f32 = ${parameters.minChromaForHueJitter};
 const GLOW_STRENGTH: f32 = ${parameters.glowStrength};
 const GLOW_FALLOFF: f32 = ${parameters.glowFalloff};
-const PARTICLE_SIZE_MM: f32 = ${parameters.particleSizeMm};
-const PARTICLE_GLOW_STRENGTH: f32 = ${parameters.particleGlowStrength};
-const PARTICLE_FALLOFF_RATE: f32 = ${parameters.particleFalloffRate};
-const PARTICLE_WARP_STRENGTH: f32 = ${parameters.particleWarpStrength};
-const PARTICLE_WARP_SCALE: f32 = ${parameters.particleWarpScale};
-const SUN_RAY_ANGLE: f32 = ${parameters.sunRayAngle};
-const SUN_RAY_DENSITY_1: f32 = ${parameters.sunRayDensity1};
-const SUN_RAY_DENSITY_2: f32 = ${parameters.sunRayDensity2};
-const SUN_RAY_INTENSITY_2: f32 = ${parameters.sunRayIntensity2};
-const SUN_RAY_FALLOFF: f32 = ${parameters.sunRayFalloff};
-const SUN_RAY_STRENGTH: f32 = ${parameters.sunRayStrength};
-const SUN_RAY_SPREAD: f32 = ${parameters.sunRaySpread};
-const SUN_RAY_SEPARATION_FALLOFF: f32 = ${parameters.sunRaySeparationFalloff};
-const SUN_RAY_NOISE_MEAN: f32 = ${parameters.sunRayNoiseMean};
-const SUN_RAY_CUTOFF_EDGE_0: f32 = ${parameters.sunRayCutoffEdge0};
-const SUN_RAY_CUTOFF_EDGE_1: f32 = ${parameters.sunRayCutoffEdge1};
+const FG_LIGHTNESS_BOOST: f32 = ${parameters.fgLightnessBoost};
 
 struct SiteData {
     site: vec4f,
@@ -409,21 +362,40 @@ fn oklch_to_oklab(lch: vec3f) -> vec3f {
     return vec3f(lightness, chroma * cos(hue), chroma * sin(hue));
 }
 
+fn catmull_rom(p0: vec3f, p1: vec3f, p2: vec3f, p3: vec3f, s: f32) -> vec3f {
+    let s2 = s * s;
+    let s3 = s2 * s;
+    return 0.5 * (
+        2.0 * p1
+        + (-p0 + p2) * s
+        + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * s2
+        + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * s3
+    );
+}
+
 fn sample_background_gradient_oklab(t: f32) -> vec3f {
     let stop0 = ${floatLiteral(oklabBgStops[0].position)};
     let stop1 = ${floatLiteral(oklabBgStops[1].position)};
+    let stop2 = ${floatLiteral(oklabBgStops[2].position)};
 
     let color0 = ${vec3Literal(oklabBgStops[0].oklab)};
     let color1 = ${vec3Literal(oklabBgStops[1].oklab)};
+    let color2 = ${vec3Literal(oklabBgStops[2].oklab)};
 
     if (t <= stop0) {
         return color0;
     }
+    if (t >= stop2) {
+        return color2;
+    }
     if (t <= stop1) {
         let segment_t = (t - stop0) / (stop1 - stop0);
-        return mix(color0, color1, segment_t);
+        let phantom_before = 2.0 * color0 - color1;
+        return catmull_rom(phantom_before, color0, color1, color2, segment_t);
     }
-    return color1;
+    let segment_t = (t - stop1) / (stop2 - stop1);
+    let phantom_after = 2.0 * color2 - color1;
+    return catmull_rom(color0, color1, color2, phantom_after, segment_t);
 }
 
 // Cf. https://www.shadertoy.com/view/XlGcRh
@@ -597,30 +569,6 @@ fn grain_lch(lab: vec3f, grain_coord: vec2f, seed: u32) -> vec3f {
     return oklch_to_oklab(vec3f(l, c, h));
 }
 
-fn sun_rays(uv: vec2f, aspect: f32, seed: u32) -> f32 {
-    // Aspect-corrected screen space: y in [0,1] (0=bottom, 1=top), x in height units.
-    let screen_uv = vec2f(uv.x * aspect, uv.y);
-
-    // Project onto the axis perpendicular to the ray direction. Rays originate at
-    // the top edge (screen_uv.y == 1) and travel downward at SUN_RAY_ANGLE from
-    // vertical; pixels on the same ray share the same ray_param.
-    let cos_a = cos(SUN_RAY_ANGLE);
-    let sin_a = sin(SUN_RAY_ANGLE);
-    let depth_from_top = 1.0 - screen_uv.y;
-    let denom = depth_from_top + SUN_RAY_SPREAD * screen_uv.y;
-    let ray_param = (screen_uv.x * cos_a + (screen_uv.y - 1.0) * sin_a) / denom;
-
-    // Two noise slices at different frequencies, both constant along the ray
-    // direction so they form streaks perpendicular to ray_param.
-    let n1 = simplex_noise_2d(vec2f(ray_param * SUN_RAY_DENSITY_1, 0.0), seed + 197u);
-    let n2 = simplex_noise_2d(vec2f(ray_param * SUN_RAY_DENSITY_2, 0.0), seed + 211u);
-    let rays = exp(-SUN_RAY_SEPARATION_FALLOFF * (n1 - SUN_RAY_NOISE_MEAN) * (n1 - SUN_RAY_NOISE_MEAN)) + exp(-SUN_RAY_SEPARATION_FALLOFF * (n2 - SUN_RAY_NOISE_MEAN) * (n2 - SUN_RAY_NOISE_MEAN)) * SUN_RAY_INTENSITY_2;
-
-    let falloff = exp(-max(0.0, depth_from_top) * SUN_RAY_FALLOFF);
-    let cutoff = smoothstep(SUN_RAY_CUTOFF_EDGE_0, SUN_RAY_CUTOFF_EDGE_1, ray_param);
-    return rays * falloff * cutoff;
-}
-
 @fragment
 fn main_fragment(in: VertexOut) -> FragmentOut {
     // Ray setup.
@@ -636,7 +584,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
 
     // Camera setup.
     let cam_pos = vec3f(0.5, -0.4, 2.75);
-    let cam_target = vec3f(-0.325, 0.3, 0.0);
+    let cam_target = vec3f(-0.325, 0.4, 0.0);
     let cam_up = vec3f(0.0, 1.0, 0.0);
 
     // Camera basis.
@@ -664,7 +612,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     var direction = vec2f(0.0, 0.0);
     var depth = -1.0;
     var min_dist = 1e9;
-    var color = ${vec3Literal(FG_SRGB)};
+    var color = ${vec3Literal(fg_srgb)};
 
     for (var step = 0; step < max_steps; step++) {
         let p = cam_pos + ray_dir * t;
@@ -695,6 +643,18 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
             direction = normalize(p_plus_clip - p_minus_clip);
 
             depth = dot(p - cam_pos, cam_forward);
+
+            let t_gradient = pow(0.5 * normal.y + 0.5, BG_PARAMETER_EXPONENT);
+            let fg_glow = sample_background_gradient_oklab(t_gradient);
+            let fg_shine = vec3(fg_glow.x * FG_LIGHTNESS_BOOST, fg_glow.yz);
+
+            let mm_per_pixel = 1.0 / global_uniforms.pixels_per_mm;
+            let grain_coord = pixel_coord * mm_per_pixel * INVERSE_GRAIN_SIZE_MM;
+            let fg_with_grain = grain_lch(fg_shine, grain_coord, global_uniforms.seed);
+
+            let shine_srgb = linear_to_srgb(oklab_to_linear_rgb(fg_with_grain));
+            color = mix(color, shine_srgb, 0.275);
+
             break;
         }
 
@@ -706,26 +666,18 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     }
 
     if (depth < 0.0) {
-        let t_gradient = pow(dot(in.uv, vec2(0.15, 0.85)), 0.75);
+        let t_gradient = pow(dot(in.uv, vec2(0.075, 0.925)), BG_PARAMETER_EXPONENT);
         let bg_gradient = sample_background_gradient_oklab(t_gradient);
-        let mm_per_pixel = 1.0 / global_uniforms.pixels_per_mm;
-        let grain_coord = pixel_coord * mm_per_pixel * INVERSE_GRAIN_SIZE_MM;
-        let bg_with_grain = grain_lch(bg_gradient, grain_coord, global_uniforms.seed);
-
-        let particle_coord = pixel_coord * mm_per_pixel / PARTICLE_SIZE_MM;
-        let rot = vec2f(7.0 / 25.0, 24.0 / 25.0);
-        let warp_x = fbm3_simplex_2d(particle_coord * PARTICLE_WARP_SCALE, rot, global_uniforms.seed + 101u);
-        let warp_y = fbm3_simplex_2d(particle_coord * PARTICLE_WARP_SCALE + vec2f(10.0, 5.0), rot, global_uniforms.seed + 103u);
-        let warp = vec2f(warp_x, warp_y) * PARTICLE_WARP_STRENGTH;
-        let particle_amount = voronoi_glow(particle_coord + warp, global_uniforms.seed + 107u, PARTICLE_FALLOFF_RATE);
-        let bg_with_particles = mix(bg_with_grain, ${vec3Literal(fg_oklab)}, PARTICLE_GLOW_STRENGTH * particle_amount);
-
-        let ray_amount = sun_rays(in.uv, global_uniforms.aspect, global_uniforms.seed) * SUN_RAY_STRENGTH;
-        let bg_with_rays = bg_with_particles + ${vec3Literal(sun_oklab)} * ray_amount;
 
         let glow_strength = GLOW_STRENGTH * exp(-min_dist * GLOW_FALLOFF);
-        let bg_oklab = mix(bg_with_rays, ${vec3Literal(fg_oklab)}, glow_strength);
-        color = linear_to_srgb(oklab_to_linear_rgb(bg_oklab));
+        let bg_with_glow = vec3(bg_gradient.x * (1.0 + glow_strength), bg_gradient.yz);
+
+
+        let mm_per_pixel = 1.0 / global_uniforms.pixels_per_mm;
+        let grain_coord = pixel_coord * mm_per_pixel * INVERSE_GRAIN_SIZE_MM;
+        let bg_with_grain = grain_lch(bg_with_glow, grain_coord, global_uniforms.seed);
+
+        color = linear_to_srgb(oklab_to_linear_rgb(bg_with_grain));
     }
 
     return FragmentOut(
@@ -779,7 +731,6 @@ export class RadiolarianLdzSceneModule implements LdzSceneModule<RadiolarianCpuD
     private static readonly FRAGMENT_SHADER = buildFragmentShader(
         RADIOLARIAN_PARAMS,
         FG_SRGB,
-        SUN_SRGB,
         BG_STOPS,
     );
 
