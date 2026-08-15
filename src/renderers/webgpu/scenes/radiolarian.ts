@@ -666,7 +666,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     }
 
     if (depth < 0.0) {
-        let t_gradient = pow(dot(in.uv, vec2(0.075, 0.925)), BG_PARAMETER_EXPONENT);
+        let t_gradient = pow(in.uv.y, BG_PARAMETER_EXPONENT);
         let bg_gradient = sample_background_gradient_oklab(t_gradient);
 
         let glow_strength = GLOW_STRENGTH * exp(-min_dist * GLOW_FALLOFF);
