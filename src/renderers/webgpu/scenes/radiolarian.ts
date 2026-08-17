@@ -55,7 +55,7 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     grainChromaAmplitude: 0.016,
     grainHueAmplitude: (1.2 * Math.PI) / 180.0,
     minChromaForHueJitter: 0.025,
-    glowStrength: 0.06,
+    glowStrength: 0.05,
     glowFalloff: 90.0,
     fgLightnessBoost: 0.2,
 };
