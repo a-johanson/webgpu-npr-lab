@@ -49,23 +49,23 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     cornerSmoothness: 0.12 / 6.0,
     csgSmoothness: 0.009,
     cellBlendSmoothness: 0.01,
-    bgParameterExponent: 1.2,
+    bgParameterExponent: 0.8,
     grainSizeMm: 0.4,
-    grainLightnessAmplitude: 0.035,
+    grainLightnessAmplitude: 0.045,
     grainChromaAmplitude: 0.016,
     grainHueAmplitude: (1.2 * Math.PI) / 180.0,
     minChromaForHueJitter: 0.025,
-    glowStrength: 0.08,
+    glowStrength: 0.06,
     glowFalloff: 90.0,
-    fgLightnessBoost: 1.2,
+    fgLightnessBoost: 0.2,
 };
 
-const FG_SRGB: Color3 = [1.0, 0.967, 0.872];
+const FG_SRGB: Color3 = [1.0, 0.997, 0.98];
 
 const BG_STOPS: readonly GradientStop[] = [
-    { position: 0.0, srgb: [0.941, 0.71, 0.553] },
-    { position: 0.5, srgb: [0.655, 0.725, 0.635] },
-    { position: 1.0, srgb: [0.165, 0.29, 0.376] },
+    { position: 0.0, srgb: [0.165, 0.29, 0.376] },
+    { position: 0.4, srgb: [0.655, 0.725, 0.635] },
+    { position: 0.9, srgb: [0.941, 0.71, 0.553] },
 ];
 
 const buildFragmentShader = (
@@ -76,6 +76,8 @@ const buildFragmentShader = (
     if (bgStops.length !== 3) {
         throw new Error("Expected exactly 3 background stops");
     }
+
+    const fg_linear_rgb = srgbToLinear(fg_srgb);
 
     const oklabBgStops: OklabGradientStop[] = bgStops.map((stop) => ({
         position: stop.position,
@@ -583,8 +585,8 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     let light_dir = normalize(vec3f(0.5, 1.0, 2.0));
 
     // Camera setup.
-    let cam_pos = vec3f(0.5, -0.4, 2.75);
-    let cam_target = vec3f(-0.325, 0.4, 0.0);
+    let cam_pos = vec3f(0.0, 0.0, 2.8);
+    let cam_target = vec3f(0.0, 0.0, 0.0);
     let cam_up = vec3f(0.0, 1.0, 0.0);
 
     // Camera basis.
@@ -609,10 +611,10 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
 
     var t = 0.0;
     var luminance = 0.0;
-    var direction = vec2f(0.0, 0.0);
+    var direction = vec2f(0.0);
     var depth = -1.0;
     var min_dist = 1e9;
-    var color = ${vec3Literal(fg_srgb)};
+    var color = vec3f(0.0);
 
     for (var step = 0; step < max_steps; step++) {
         let p = cam_pos + ray_dir * t;
@@ -646,14 +648,14 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
 
             let t_gradient = pow(0.5 * normal.y + 0.5, BG_PARAMETER_EXPONENT);
             let fg_glow = sample_background_gradient_oklab(t_gradient);
-            let fg_shine = vec3(fg_glow.x * FG_LIGHTNESS_BOOST, fg_glow.yz);
+            let fg_shine = vec3f(clamp(fg_glow.x + FG_LIGHTNESS_BOOST, 0.0, 1.0), fg_glow.yz * (1.0 + 0.1 * FG_LIGHTNESS_BOOST));
 
             let mm_per_pixel = 1.0 / global_uniforms.pixels_per_mm;
             let grain_coord = pixel_coord * mm_per_pixel * INVERSE_GRAIN_SIZE_MM;
             let fg_with_grain = grain_lch(fg_shine, grain_coord, global_uniforms.seed);
 
-            let shine_srgb = linear_to_srgb(oklab_to_linear_rgb(fg_with_grain));
-            color = mix(color, shine_srgb, 0.275);
+            let shine_linear = oklab_to_linear_rgb(fg_with_grain);
+            color = linear_to_srgb(shine_linear * ${vec3Literal(fg_linear_rgb)});
 
             break;
         }
@@ -670,8 +672,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
         let bg_gradient = sample_background_gradient_oklab(t_gradient);
 
         let glow_strength = GLOW_STRENGTH * exp(-min_dist * GLOW_FALLOFF);
-        let bg_with_glow = vec3(bg_gradient.x * (1.0 + glow_strength), bg_gradient.yz);
-
+        let bg_with_glow = vec3f(clamp(bg_gradient.x + glow_strength, 0.0, 1.0), bg_gradient.yz * (1.0 + 0.1 * glow_strength));
 
         let mm_per_pixel = 1.0 / global_uniforms.pixels_per_mm;
         let grain_coord = pixel_coord * mm_per_pixel * INVERSE_GRAIN_SIZE_MM;
