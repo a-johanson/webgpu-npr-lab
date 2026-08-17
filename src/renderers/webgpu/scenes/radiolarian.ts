@@ -210,9 +210,13 @@ fn scene_sdf(p: vec3f) -> f32 {
     var second_alignment = -2.0;
     var third_index = index_min;
     var third_alignment = -2.0;
+    var fourth_index = index_min;
+    var fourth_alignment = -2.0;
     for (var i = index_min; i <= index_max; i++) {
         let alignment = dot(direction, sites[i].site.xyz);
         if (alignment > best_alignment) {
+            fourth_alignment = third_alignment;
+            fourth_index = third_index;
             third_alignment = second_alignment;
             third_index = second_index;
             second_alignment = best_alignment;
@@ -220,27 +224,37 @@ fn scene_sdf(p: vec3f) -> f32 {
             best_alignment = alignment;
             best_index = i;
         } else if (alignment > second_alignment) {
+            fourth_alignment = third_alignment;
+            fourth_index = third_index;
             third_alignment = second_alignment;
             third_index = second_index;
             second_alignment = alignment;
             second_index = i;
         } else if (alignment > third_alignment) {
+            fourth_alignment = third_alignment;
+            fourth_index = third_index;
             third_alignment = alignment;
             third_index = i;
+        } else if (alignment > fourth_alignment) {
+            fourth_alignment = alignment;
+            fourth_index = i;
         }
     }
 
-    // 3) Compute poly distances for the top 3 sites.
+    // 3) Compute poly distances for the top 4 sites.
     let poly_distance_0 = compute_poly_distance(best_index, direction);
     let poly_distance_1 = compute_poly_distance(second_index, direction);
     let poly_distance_2 = compute_poly_distance(third_index, direction);
+    let poly_distance_3 = compute_poly_distance(fourth_index, direction);
 
     // 4) Combine via smooth min to avoid creases at cell boundaries.
     //    At 2-way boundaries both near-zero values are rounded together;
-    //    at 3-way vertices all three participate; deep inside a cell only
-    //    the closest site matters (smin = min for well-separated values).
-    let combined_poly = smin(poly_distance_0, poly_distance_1, CELL_BLEND_SMOOTHNESS);
-    let d_poly = smin(combined_poly, poly_distance_2, CELL_BLEND_SMOOTHNESS);
+    //    at 3-way vertices three participate; at 4-way vertices all four
+    //    participate; deep inside a cell only the closest site matters
+    //    (smin = min for well-separated values).
+    let combined_poly_01 = smin(poly_distance_0, poly_distance_1, CELL_BLEND_SMOOTHNESS);
+    let combined_poly_23 = smin(poly_distance_2, poly_distance_3, CELL_BLEND_SMOOTHNESS);
+    let d_poly = smin(combined_poly_01, combined_poly_23, CELL_BLEND_SMOOTHNESS);
 
     // 5) Radial slab for through-cut extrusion.
     //    d_slab < 0 means radius lies within [SHELL_RADIUS - SHELL_THICKNESS,
