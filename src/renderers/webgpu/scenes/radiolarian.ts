@@ -49,7 +49,7 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     cornerSmoothness: 0.12 / 6.0,
     csgSmoothness: 0.009,
     cellBlendSmoothness: 0.01,
-    bgParameterExponent: 0.8,
+    bgParameterExponent: 1.2,
     grainSizeMm: 0.4,
     grainLightnessAmplitude: 0.045,
     grainChromaAmplitude: 0.016,
@@ -57,15 +57,14 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     minChromaForHueJitter: 0.025,
     glowStrength: 0.05,
     glowFalloff: 90.0,
-    fgLightnessBoost: 0.2,
+    fgLightnessBoost: 0.25,  
 };
 
 const FG_SRGB: Color3 = [1.0, 0.997, 0.98];
 
 const BG_STOPS: readonly GradientStop[] = [
     { position: 0.0, srgb: [0.165, 0.29, 0.376] },
-    { position: 0.4, srgb: [0.655, 0.725, 0.635] },
-    { position: 0.9, srgb: [0.941, 0.71, 0.553] },
+    { position: 1.0, srgb: [0.843, 0.714, 0.431] },
 ];
 
 const buildFragmentShader = (
@@ -73,7 +72,7 @@ const buildFragmentShader = (
     fg_srgb: Color3,
     bgStops: readonly GradientStop[],
 ): string => {
-    if (bgStops.length !== 3) {
+    if (bgStops.length !== 2) {
         throw new Error("Expected exactly 3 background stops");
     }
 
@@ -378,40 +377,21 @@ fn oklch_to_oklab(lch: vec3f) -> vec3f {
     return vec3f(lightness, chroma * cos(hue), chroma * sin(hue));
 }
 
-fn catmull_rom(p0: vec3f, p1: vec3f, p2: vec3f, p3: vec3f, s: f32) -> vec3f {
-    let s2 = s * s;
-    let s3 = s2 * s;
-    return 0.5 * (
-        2.0 * p1
-        + (-p0 + p2) * s
-        + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * s2
-        + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * s3
-    );
-}
-
 fn sample_background_gradient_oklab(t: f32) -> vec3f {
     let stop0 = ${floatLiteral(oklabBgStops[0].position)};
     let stop1 = ${floatLiteral(oklabBgStops[1].position)};
-    let stop2 = ${floatLiteral(oklabBgStops[2].position)};
 
     let color0 = ${vec3Literal(oklabBgStops[0].oklab)};
     let color1 = ${vec3Literal(oklabBgStops[1].oklab)};
-    let color2 = ${vec3Literal(oklabBgStops[2].oklab)};
 
     if (t <= stop0) {
         return color0;
     }
-    if (t >= stop2) {
-        return color2;
+    if (t >= stop1) {
+        return color1;
     }
-    if (t <= stop1) {
-        let segment_t = (t - stop0) / (stop1 - stop0);
-        let phantom_before = 2.0 * color0 - color1;
-        return catmull_rom(phantom_before, color0, color1, color2, segment_t);
-    }
-    let segment_t = (t - stop1) / (stop2 - stop1);
-    let phantom_after = 2.0 * color2 - color1;
-    return catmull_rom(color0, color1, color2, phantom_after, segment_t);
+    let segment_t = (t - stop0) / (stop1 - stop0);
+    return mix(color0, color1, segment_t);
 }
 
 // Cf. https://www.shadertoy.com/view/XlGcRh
