@@ -57,7 +57,7 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     minChromaForHueJitter: 0.025,
     glowStrength: 0.05,
     glowFalloff: 90.0,
-    fgLightnessBoost: 0.25,  
+    fgLightnessBoost: 0.25,
 };
 
 const FG_SRGB: Color3 = [1.0, 0.997, 0.98];
