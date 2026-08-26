@@ -10,8 +10,8 @@ import type { NprProgramModule, NprProgramRenderContext } from "../npr-program-m
 export class RadiolarianNprProgramModule implements NprProgramModule {
     readonly id = "radiolarian";
 
-    public static readonly WIDTH_CM = 120;
-    public static readonly HEIGHT_CM = 120;
+    public static readonly WIDTH_CM = 60;
+    public static readonly HEIGHT_CM = 60;
     public static readonly NPR_SEED = "radiolarian-1";
 
     /**
@@ -42,11 +42,11 @@ export class RadiolarianNprProgramModule implements NprProgramModule {
         const pixelsPerMm = dpi / 25.4;
 
         const config = {
-            dSepMax: 4.25 * pixelsPerMm,
+            dSepMax: 0.5 * 4.25 * pixelsPerMm,
             dSepShadowFactor: 0.4,
             gammaLuminance: 2.0,
             dTestFactor: 0.9,
-            dStep: 0.6 * pixelsPerMm,
+            dStep: 0.5 * 0.6 * pixelsPerMm,
             maxDepthStep: 0.05,
             maxAccumAngle: Math.PI * 0.6,
             maxHatchedLuminance: 1.9,
@@ -78,16 +78,16 @@ export class RadiolarianNprProgramModule implements NprProgramModule {
 
         ctx2d.strokeStyle = "#000";
         ctx2d.fillStyle = "#000";
-        ctx2d.lineWidth = 0.42 * pixelsPerMm;
+        ctx2d.lineWidth = 0.5 * 0.42 * pixelsPerMm;
         ctx2d.lineCap = "round";
         ctx2d.lineJoin = "round";
 
         const circleRadius = 0.8 * ctx2d.lineWidth;
         const circleOptions = {
             radius: circleRadius,
-            spacing: 0.6 * ctx2d.lineWidth,
-            radiusJitter: 0.4 * ctx2d.lineWidth,
-            normalOffsetJitter: 0.3 * ctx2d.lineWidth,
+            spacing: 0.7 * ctx2d.lineWidth,
+            radiusJitter: 0.6 * ctx2d.lineWidth,
+            normalOffsetJitter: 0.4 * ctx2d.lineWidth,
         };
 
         const imgData = ctx2d.createImageData(width, height, { colorSpace: "srgb" });
