@@ -18,7 +18,7 @@ export class ShellNprProgramModule implements NprProgramModule {
      * @param context - Render context values.
      */
     renderFromLdz(context: NprProgramRenderContext): void {
-        const { ctx2d, ldzData, colorData, width, height, dpi, seed } = context;
+        const { ctx2d, ldzData, width, height, dpi, seed } = context;
         if (
             !Number.isFinite(width) ||
             !Number.isFinite(height) ||
@@ -30,9 +30,6 @@ export class ShellNprProgramModule implements NprProgramModule {
             throw new Error(
                 `Invalid shell render inputs: width=${String(width)}, height=${String(height)}, dpi=${String(dpi)}`,
             );
-        }
-        if (!colorData) {
-            throw new Error("Shell program requires colorData from the GPU scene output");
         }
 
         const pixelsPerMm = dpi / 25.4;
@@ -59,9 +56,8 @@ export class ShellNprProgramModule implements NprProgramModule {
         );
 
         ctx2d.save();
-        const imgData = ctx2d.createImageData(width, height, { colorSpace: "srgb" });
-        imgData.data.set(colorData);
-        ctx2d.putImageData(imgData, 0, 0);
+        ctx2d.fillStyle = "#fff";
+        ctx2d.fillRect(0, 0, width, height);
         ctx2d.fillStyle = "#222";
         for (const [x, y] of stipples) {
             ctx2d.beginPath();
