@@ -55,7 +55,7 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     grainChromaAmplitude: 0.016,
     grainHueAmplitude: (1.2 * Math.PI) / 180.0,
     minChromaForHueJitter: 0.025,
-    glowStrength: 0.05,
+    glowStrength: 0.03,
     glowFalloff: 90.0,
     fgLightnessBoost: 0.25,
 };
@@ -178,10 +178,12 @@ fn compute_poly_distance(site_index: u32, direction: vec3f) -> f32 {
 }
 
 fn scene_sdf(p: vec3f) -> f32 {
+    let p_warped = p + vec3f(0.07, 0.03, 0.07) * sin(9.0 * p.zxy);// + 0.02 * sin(19.0 * p.yzx);
+
     // 1) Base shell band around SHELL_RADIUS with thickness SHELL_THICKNESS.
     //    Uses smooth_abs to round the C1 kink of abs() at the shell mid-radius,
     //    which would otherwise create a visible crease on the inside of the hole walls.
-    let radius = length(p);
+    let radius = length(p_warped);
     let d_shell = smooth_abs(radius - SHELL_RADIUS, SHELL_MID_SMOOTHNESS) - smooth_abs(0.5 * SHELL_THICKNESS, SHELL_MID_SMOOTHNESS);
 
     let point_count = POINT_COUNT;
@@ -191,7 +193,7 @@ fn scene_sdf(p: vec3f) -> f32 {
 
     // Normalize p to a unit direction for spherical ownership and boundary tests.
     let safe_radius = max(radius, 1e-6);
-    let direction = p / safe_radius;
+    let direction = p_warped / safe_radius;
 
     // 2) Corridor search.  Find the three sites with strongest alignment to
     //    the direction (closest on the sphere).
@@ -598,9 +600,9 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
 
     // Ray marching.
     let max_dist = 10.0;
-    let max_steps = 500;
+    let max_steps = 900;
     let epsilon = 0.0001;
-    let step_scale = 1.0;
+    let step_scale = 0.5;
     let orientation_offset = radians(90.0);
 
     var t = 0.0;
