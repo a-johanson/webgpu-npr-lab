@@ -85,8 +85,8 @@ export class RadiolarianNprProgramModule implements NprProgramModule {
         const circleRadius = 0.8 * ctx2d.lineWidth;
         const circleOptions = {
             radius: circleRadius,
-            spacing: 0.7 * ctx2d.lineWidth,
-            radiusJitter: 0.6 * ctx2d.lineWidth,
+            spacing: 0.6 * ctx2d.lineWidth,
+            radiusJitter: 0.5 * ctx2d.lineWidth,
             normalOffsetJitter: 0.4 * ctx2d.lineWidth,
         };
 

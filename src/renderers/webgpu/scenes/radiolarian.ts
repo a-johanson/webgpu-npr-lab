@@ -32,8 +32,6 @@ type RadiolarianParameters = {
     grainChromaAmplitude: number;
     grainHueAmplitude: number;
     minChromaForHueJitter: number;
-    glowStrength: number;
-    glowFalloff: number;
     fgLightnessBoost: number;
 };
 
@@ -51,12 +49,10 @@ const RADIOLARIAN_PARAMS: RadiolarianParameters = {
     cellBlendSmoothness: 0.01,
     bgParameterExponent: 1.2,
     grainSizeMm: 0.4,
-    grainLightnessAmplitude: 0.045,
+    grainLightnessAmplitude: 0.04,
     grainChromaAmplitude: 0.016,
     grainHueAmplitude: (1.2 * Math.PI) / 180.0,
     minChromaForHueJitter: 0.025,
-    glowStrength: 0.03,
-    glowFalloff: 90.0,
     fgLightnessBoost: 0.25,
 };
 
@@ -120,8 +116,6 @@ const GRAIN_LIGHTNESS_AMPLITUDE: f32 = ${parameters.grainLightnessAmplitude};
 const GRAIN_CHROMA_AMPLITUDE: f32 = ${parameters.grainChromaAmplitude};
 const GRAIN_HUE_AMPLITUDE: f32 = ${parameters.grainHueAmplitude};
 const MIN_CHROMA_FOR_HUE_JITTER: f32 = ${parameters.minChromaForHueJitter};
-const GLOW_STRENGTH: f32 = ${parameters.glowStrength};
-const GLOW_FALLOFF: f32 = ${parameters.glowFalloff};
 const FG_LIGHTNESS_BOOST: f32 = ${parameters.fgLightnessBoost};
 
 struct SiteData {
@@ -528,28 +522,6 @@ fn fbm3_simplex_2d(p: vec2f, rot_cos_sin: vec2f, seed: u32) -> f32 {
     return sum * scale;
 }
 
-fn voronoi_glow(p: vec2f, seed: u32, falloff_rate: f32) -> f32 {
-    let ip = floor(p);
-    let fp = p - ip;
-    var glow = 0.0;
-    for (var dx = -1; dx <= 1; dx++) {
-        for (var dy = -1; dy <= 1; dy++) {
-            let neighbor = ip + vec2f(f32(dx), f32(dy));
-            let hashed = pcg2d(
-                vec2u(u32(neighbor.x), u32(neighbor.y)) + vec2u(seed, seed ^ 0x9E3779B9u)
-            );
-            let offset = vec2f(
-                u32_to_unit_float(hashed.x),
-                u32_to_unit_float(hashed.y)
-            );
-            let center = vec2f(f32(dx), f32(dy)) + offset;
-            let diff = fp - center;
-            glow += exp(-dot(diff, diff) * falloff_rate);
-        }
-    }
-    return glow;
-}
-
 fn grain_lch(lab: vec3f, grain_coord: vec2f, seed: u32) -> vec3f {
     let lch = oklab_to_oklch(lab);
     let lightness = lch.x;
@@ -567,6 +539,18 @@ fn grain_lch(lab: vec3f, grain_coord: vec2f, seed: u32) -> vec3f {
     return oklch_to_oklab(vec3f(l, c, h));
 }
 
+fn lab_distance_decay(oklab: vec3f, dist: f32) -> vec3f {
+    let density = 0.05;
+    let target_l = 0.0;
+    let min_dist = 2.2;
+    let max_dist = 12.0;
+
+    let normalized_d = (dist - min_dist) / (max_dist - min_dist);
+    let t = smoothstep(1.0, 0.0, normalized_d);
+
+    return oklab * t;
+}
+
 @fragment
 fn main_fragment(in: VertexOut) -> FragmentOut {
     // Ray setup.
@@ -581,7 +565,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     let light_dir = normalize(vec3f(0.5, 1.0, 2.0));
 
     // Camera setup.
-    let cam_pos = vec3f(0.0, 0.0, 2.8);
+    let cam_pos = vec3f(0.1, 0.0, 2.7);
     let cam_target = vec3f(0.0, 0.0, 0.0);
     let cam_up = vec3f(0.0, 1.0, 0.0);
 
@@ -600,7 +584,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
 
     // Ray marching.
     let max_dist = 10.0;
-    let max_steps = 900;
+    let max_steps = 1200;
     let epsilon = 0.0001;
     let step_scale = 0.5;
     let orientation_offset = radians(90.0);
@@ -609,13 +593,11 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     var luminance = 0.0;
     var direction = vec2f(0.0);
     var depth = -1.0;
-    var min_dist = 1e9;
-    var color = vec3f(0.0);
+    var color = vec3f(1.0);
 
     for (var step = 0; step < max_steps; step++) {
         let p = cam_pos + ray_dir * t;
         let d = scene_sdf(p);
-        min_dist = min(min_dist, d);
 
         if (d < epsilon) {
             let normal = calc_normal(p);
@@ -645,10 +627,11 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
             let t_gradient = pow(0.5 * normal.y + 0.5, BG_PARAMETER_EXPONENT);
             let fg_glow = sample_background_gradient_oklab(t_gradient);
             let fg_shine = vec3f(clamp(fg_glow.x + FG_LIGHTNESS_BOOST, 0.0, 1.0), fg_glow.yz * (1.0 + 0.1 * FG_LIGHTNESS_BOOST));
+            let fg_decayed = lab_distance_decay(fg_shine, depth);
 
             let mm_per_pixel = 1.0 / global_uniforms.pixels_per_mm;
             let grain_coord = pixel_coord * mm_per_pixel * INVERSE_GRAIN_SIZE_MM;
-            let fg_with_grain = grain_lch(fg_shine, grain_coord, global_uniforms.seed);
+            let fg_with_grain = grain_lch(fg_decayed, grain_coord, global_uniforms.seed);
 
             let shine_linear = oklab_to_linear_rgb(fg_with_grain);
             color = linear_to_srgb(shine_linear * ${vec3Literal(fg_linear_rgb)});
@@ -661,20 +644,6 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
         }
 
         t += step_scale * d;
-    }
-
-    if (depth < 0.0) {
-        let t_gradient = pow(in.uv.y, BG_PARAMETER_EXPONENT);
-        let bg_gradient = sample_background_gradient_oklab(t_gradient);
-
-        let glow_strength = GLOW_STRENGTH * exp(-min_dist * GLOW_FALLOFF);
-        let bg_with_glow = vec3f(clamp(bg_gradient.x + glow_strength, 0.0, 1.0), bg_gradient.yz * (1.0 + 0.1 * glow_strength));
-
-        let mm_per_pixel = 1.0 / global_uniforms.pixels_per_mm;
-        let grain_coord = pixel_coord * mm_per_pixel * INVERSE_GRAIN_SIZE_MM;
-        let bg_with_grain = grain_lch(bg_with_glow, grain_coord, global_uniforms.seed);
-
-        color = linear_to_srgb(oklab_to_linear_rgb(bg_with_grain));
     }
 
     return FragmentOut(
