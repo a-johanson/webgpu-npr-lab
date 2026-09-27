@@ -172,7 +172,7 @@ fn compute_poly_distance(site_index: u32, direction: vec3f) -> f32 {
 }
 
 fn scene_sdf(p: vec3f) -> f32 {
-    let p_warped = p + vec3f(0.07, 0.03, 0.07) * sin(9.0 * p.zxy);// + 0.02 * sin(19.0 * p.yzx);
+    let p_warped = p +  0.8 * vec3f(0.07, 0.03, 0.05) * sin(10.0 * p.zxy + vec3f(-0.9, -3.5, 0.0));// + 0.02 * sin(19.0 * p.yzx);
 
     // 1) Base shell band around SHELL_RADIUS with thickness SHELL_THICKNESS.
     //    Uses smooth_abs to round the C1 kink of abs() at the shell mid-radius,
@@ -565,7 +565,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     let light_dir = normalize(vec3f(0.5, 1.0, 2.0));
 
     // Camera setup.
-    let cam_pos = vec3f(0.1, 0.0, 2.7);
+    let cam_pos = vec3f(0.0, 0.1, 2.7);
     let cam_target = vec3f(0.0, 0.0, 0.0);
     let cam_up = vec3f(0.0, 1.0, 0.0);
 
