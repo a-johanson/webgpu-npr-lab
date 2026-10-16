@@ -542,8 +542,8 @@ fn grain_lch(lab: vec3f, grain_coord: vec2f, seed: u32) -> vec3f {
 fn lab_distance_decay(oklab: vec3f, dist: f32) -> vec3f {
     let density = 0.05;
     let target_l = 0.0;
-    let min_dist = 2.2;
-    let max_dist = 12.0;
+    let min_dist = 2.3;
+    let max_dist = 12.1;
 
     let normalized_d = (dist - min_dist) / (max_dist - min_dist);
     let t = smoothstep(1.0, 0.0, normalized_d);
@@ -565,7 +565,7 @@ fn main_fragment(in: VertexOut) -> FragmentOut {
     let light_dir = normalize(vec3f(0.5, 1.0, 2.0));
 
     // Camera setup.
-    let cam_pos = vec3f(0.0, 0.1, 2.7);
+    let cam_pos = vec3f(0.0, 0.1, 2.8);
     let cam_target = vec3f(0.0, 0.0, 0.0);
     let cam_up = vec3f(0.0, 1.0, 0.0);
 
